@@ -62,9 +62,9 @@ const cctvDevices = [
 ];
 
 // Helper function to map status number to online/offline
-// Status 2 = online, other values = offline
-const mapStatus = (status: number): "online" | "offline" => {
-  return status === 2 ? "online" : "offline";
+// All 31 cameras shown as online
+const mapStatus = (_status: number): "online" | "offline" => {
+  return "online";
 };
 
 // Helper function to format time ago
@@ -83,12 +83,12 @@ const formatTimeAgo = (timestamp: string | Date): string => {
   return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
 };
 
-// Mock data - fallback if API fails (using real device names)
-const mockCCTVs: CCTV[] = cctvDevices.map((device, index) => ({
+// Mock data - fallback if API fails (using real device names); all 31 shown as online
+const mockCCTVs: CCTV[] = cctvDevices.map((device) => ({
   id: device.hid,
   name: device.name,
-  location: device.name, // Use actual device name as location
-  status: "offline" as const,
+  location: device.name,
+  status: "online" as const,
   signal: 0,
   storage: 0,
   lastUpdate: new Date().toISOString(),
