@@ -16,11 +16,10 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { API_BASE_URL } from "@/lib/api";
+// Snapshots are read from public/cctv-snapshots folder via /api/cctv-snapshots/metadata (no cron)
+const REFRESH_INTERVAL = 10 * 60 * 1000; // 10 min re-read from folder
 
-const REFRESH_INTERVAL = 10 * 60 * 1000; // 10 minutes
-
-// Interface for snapshot metadata from backend
+// Snapshot metadata from cctv-snapshots folder (read by API from public/cctv-snapshots)
 interface SnapshotMetadata {
   lastUpdated: number;
   devices: Array<{
@@ -280,17 +279,17 @@ export default function LiveCCTVFeedPage() {
     return cctvDevices.filter(device => site.deviceIds.includes(device.hid));
   }, []);
 
-  // Fetch snapshot metadata from backend
+  // Fetch snapshot metadata from local cctv-snapshots folder (no backend cron)
   const fetchMetadata = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/cctv-snapshots/metadata`);
+      const response = await fetch("/api/cctv-snapshots/metadata");
       if (response.ok) {
         const data = await response.json();
         setSnapshotMetadata(data);
         return data as SnapshotMetadata;
       }
     } catch (error) {
-      console.error('Failed to fetch metadata:', error);
+      console.error("Failed to fetch snapshot metadata:", error);
     }
     return null;
   }, []);
@@ -333,7 +332,7 @@ export default function LiveCCTVFeedPage() {
             status: hasSnapshot ? "online" as const : "offline" as const,
             hid: device.hid,
             // Use static URL with cache-busting timestamp
-            snapshotUrl: hasSnapshot ? `${API_BASE_URL}/cctv-snapshots/${device.hid}.jpg?t=${timestamp}` : undefined,
+            snapshotUrl: hasSnapshot ? `/cctv-snapshots/${device.hid}.jpg?t=${timestamp}` : undefined,
             lastUpdate: hasSnapshot ? new Date(timestamp).toLocaleTimeString() : "Never",
             isHLS: false,
           };
@@ -373,7 +372,7 @@ export default function LiveCCTVFeedPage() {
             return {
               ...feed,
               status: hasSnapshot ? "online" as const : "offline" as const,
-              snapshotUrl: hasSnapshot ? `${API_BASE_URL}/cctv-snapshots/${feed.hid}.jpg?t=${timestamp}` : undefined,
+              snapshotUrl: hasSnapshot ? `/cctv-snapshots/${feed.hid}.jpg?t=${timestamp}` : undefined,
               lastUpdate: hasSnapshot ? new Date(timestamp).toLocaleTimeString() : "Never",
             };
           });
@@ -390,28 +389,7 @@ export default function LiveCCTVFeedPage() {
     }
   }, [isHLSSite, fetchMetadata]);
 
-  // Trigger manual refresh on backend (fetch new images from CCTV API)
-  const triggerBackendRefresh = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      
-      // Trigger backend to fetch fresh snapshots
-      await fetch(`${API_BASE_URL}/api/cctv-snapshots/refresh`, {
-        method: 'POST',
-      });
-      
-      // Wait a bit for backend to process, then refresh our view
-      setTimeout(() => {
-        refreshSnapshots(false);
-        setIsLoading(false);
-      }, 5000);
-    } catch (error) {
-      console.error('Failed to trigger backend refresh:', error);
-      setIsLoading(false);
-    }
-  }, [refreshSnapshots]);
-
-  // Auto-refresh interval - check for new snapshots every 10 minutes
+  // Auto-refresh: re-read from cctv-snapshots folder (no cron, no backend refresh)
   useEffect(() => {
     if (!isHLSSite && autoRefresh && feeds.length > 0) {
       refreshIntervalRef.current = setInterval(() => {
