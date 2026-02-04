@@ -261,7 +261,7 @@ export default function StreetlightStatus({
               </button>
               <div className="flex items-center gap-1 text-xs text-white/70">
                 <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-                Dummy data
+                Live data
               </div>
             </div>
           </div>
