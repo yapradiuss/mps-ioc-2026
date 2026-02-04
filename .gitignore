@@ -45,8 +45,8 @@ Thumbs.db
 *.swo
 *~
 
-# Local data
-db-data/
+# Local data (root db-data folder only; do not ignore src/app/api/db-data/ route)
+/db-data/
 
 # Turbo
 .turbo
