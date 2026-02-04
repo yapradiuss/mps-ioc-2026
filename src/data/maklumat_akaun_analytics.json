@@ -1,0 +1,41 @@
+{
+  "success": true,
+  "data": {
+    "current_income": {
+      "amount": 10269166.929999987,
+      "count": 37830
+    },
+    "current_arrears": {
+      "amount": 54785348.28000033,
+      "count": 30683
+    },
+    "current_penalty": {
+      "amount": 732836.6999999997,
+      "count": 36891
+    },
+    "penalty_arrears": {
+      "amount": 5566758.98,
+      "count": 30057
+    },
+    "current_warrant": {
+      "amount": 0,
+      "count": 0
+    },
+    "warrant_arrears": {
+      "amount": 10552.94,
+      "count": 60
+    },
+    "other_charges": {
+      "amount": 11879.95,
+      "count": 17
+    },
+    "total_amount_due": {
+      "amount": 84688315.87000144,
+      "count": 75416
+    }
+  },
+  "total_overall": {
+    "total_amount_due": 84688315.87000144,
+    "total_accounts": 75416
+  }
+}

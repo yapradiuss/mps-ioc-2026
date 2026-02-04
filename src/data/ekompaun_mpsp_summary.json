@@ -1,0 +1,17 @@
+{
+  "ekompaun_mpsp": [
+    {
+      "jenis_kompaun": "BYLAW PELBAGAI",
+      "total": 9425
+    },
+    {
+      "jenis_kompaun": "BYLAW KENDERAAN",
+      "total": 3002
+    }
+  ],
+  "summary": {
+    "year": 2025,
+    "total_records": 12427,
+    "jenis_kompaun_count": 2
+  }
+}
