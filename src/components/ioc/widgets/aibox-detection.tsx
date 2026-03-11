@@ -89,6 +89,9 @@ export default function AIBoxDetection({
   const [position, setPosition] = useState(initialPosition || { x: 900, y: 200 });
   const [size, setSize] = useState(initialSize);
   const [isMounted, setIsMounted] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeStart, setResizeStart] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const [aiboxes] = useState<AIBox[]>(mockAIBoxes);
 
@@ -156,9 +159,8 @@ export default function AIBoxDetection({
   const handleResizeStart = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
+    if (disableInternalPositioning) return;
     if (!cardRef.current) return;
-    
     const rect = cardRef.current.getBoundingClientRect();
     setResizeStart({
       x: e.clientX,
@@ -168,6 +170,28 @@ export default function AIBoxDetection({
     });
     setIsResizing(true);
   };
+
+  useEffect(() => {
+    if (!isResizing || resizeStart === null) return;
+    const onMove = (e: MouseEvent) => {
+      const dx = e.clientX - resizeStart.x;
+      const dy = e.clientY - resizeStart.y;
+      setSize({
+        width: Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, resizeStart.width + dx)),
+        height: Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, resizeStart.height + dy)),
+      });
+    };
+    const onUp = () => {
+      setIsResizing(false);
+      setResizeStart(null);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [isResizing, resizeStart]);
 
   // Determine if card is wide enough for 2-column layout
   const isWide = size.width >= 600;

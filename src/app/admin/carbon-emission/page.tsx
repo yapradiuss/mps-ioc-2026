@@ -48,13 +48,15 @@ function tagRowsWithDirection(rawRows: ApecRow[]): TaggedRow[] {
       if (row[""] === "Arah 1" || row[""] === "Arah 2") currentDir = row[""];
       return { ...row, _dir: currentDir };
     })
-    .filter(
-      (row) =>
+    .filter((row: ApecRow & { _dir: string }) => {
+      const v = row["__1"];
+      return (
         (row._dir === "Arah 1" || row._dir === "Arah 2") &&
-        row.__1 &&
-        row.__1 !== "" &&
+        v != null &&
+        v !== "" &&
         row.datetime !== "Jumlah"
-    );
+      );
+    }) as TaggedRow[];
 }
 
 // Emission factors from LCC 2030 calculator (g CO2e/km)
