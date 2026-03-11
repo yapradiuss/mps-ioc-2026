@@ -11,7 +11,6 @@ import { Pie } from 'react-chartjs-2';
 import { FileText, Calendar, AlertCircle, Maximize2, TrendingUp, Receipt } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 const EKOMPAUN_DB_DATA_URL = "/api/db-data/ekompaun_mpsp_summary";
 
 // Register Chart.js components
@@ -74,6 +73,8 @@ export default function CompoundChart({
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const cardRef = useRef<HTMLDivElement>(null);
+  const chartWrapperRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(500);
   const [ekompaunData, setEkompaunData] = useState<EkompaunData[]>([]);
   const [summary, setSummary] = useState<EkompaunSummary['summary'] | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -89,6 +90,17 @@ export default function CompoundChart({
       setSize(initialSize);
     }
   }, [disableInternalPositioning, initialSize?.width, initialSize?.height]);
+
+  // Observe card width for responsive legend position when GridStack resizes
+  useEffect(() => {
+    if (!disableInternalPositioning || !cardRef.current) return;
+    const ro = new ResizeObserver((entries) => {
+      const { width } = entries[0]?.contentRect ?? {};
+      if (typeof width === "number" && width > 0) setContainerWidth(width);
+    });
+    ro.observe(cardRef.current);
+    return () => ro.disconnect();
+  }, [disableInternalPositioning]);
 
   // Fetch ekompaun data from API
   useEffect(() => {
@@ -159,7 +171,7 @@ export default function CompoundChart({
     maintainAspectRatio: false,
     plugins: {
       legend: {
-        position: 'right' as const,
+        position: (containerWidth < 400 ? 'bottom' : 'right') as 'top' | 'left' | 'bottom' | 'right',
         labels: {
           color: '#fff',
           padding: 12,
@@ -181,6 +193,7 @@ export default function CompoundChart({
                   lineWidth: dataset.borderWidth,
                   hidden: false,
                   index: i,
+                  fontColor: '#fff',
                 };
               });
             }
@@ -302,161 +315,153 @@ export default function CompoundChart({
         msUserSelect: "none",
       }}
     >
-      <Card className={`bg-background/10 backdrop-blur-2xl border border-white/10 shadow-lg flex flex-col ${disableInternalPositioning ? "flex-1 min-h-0" : "h-full"}`}>
-        <CardHeader 
+      <Card className={`rounded-xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-xl flex flex-col ${disableInternalPositioning ? "flex-1 min-h-0" : "h-full"}`}>
+        <CardHeader
           data-drag-handle
-          className="pb-3 cursor-grab active:cursor-grabbing border-b border-white/10 select-none flex-shrink-0"
+          className="py-3 px-4 cursor-grab active:cursor-grabbing border-b border-white/10 select-none flex-shrink-0"
           onMouseDown={disableInternalPositioning ? undefined : handleMouseDown}
           style={{ cursor: disableInternalPositioning ? "default" : "grab" }}
         >
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-white font-semibold flex items-center gap-2 text-lg">
-              <Receipt className="text-blue-400 h-5 w-5" />
-              Compound Analytics (2025)
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-white font-semibold flex items-center gap-2 text-base truncate">
+              <Receipt className="h-4 w-4 sm:h-5 sm:w-5 text-blue-400 shrink-0" />
+              <span className="truncate">Compound Analytics (2025)</span>
             </CardTitle>
-            <div className="flex items-center gap-1 text-xs text-white/70">
-              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+            <span className="flex items-center gap-1.5 text-[10px] sm:text-xs text-white/60 shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               Live
-            </div>
+            </span>
           </div>
         </CardHeader>
-        <CardContent className="pt-4 flex-1 min-h-0 overflow-hidden flex flex-col">
+        <CardContent className="p-3 sm:p-4 flex-1 min-h-0 overflow-hidden flex flex-col">
           {/* Loading State */}
           {isLoading && (
-            <div className="flex items-center justify-center h-full">
+            <div className="flex flex-1 items-center justify-center min-h-[200px]">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-2 border-white/20 border-t-white mx-auto mb-3" />
                 <p className="text-white/70 text-sm">Loading compound data...</p>
               </div>
             </div>
           )}
-          
+
           {/* Error State */}
           {error && !isLoading && (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <AlertCircle className="h-8 w-8 text-red-400 mx-auto mb-2" />
-                <p className="text-red-400 text-sm mb-2">Error loading data</p>
-                <p className="text-white/50 text-xs">{error}</p>
+            <div className="flex flex-1 items-center justify-center min-h-[200px]">
+              <div className="text-center max-w-[240px]">
+                <AlertCircle className="h-10 w-10 text-red-400/90 mx-auto mb-3" />
+                <p className="text-red-400/90 text-sm font-medium mb-1">Error loading data</p>
+                <p className="text-white/50 text-xs leading-relaxed">{error}</p>
               </div>
             </div>
           )}
           
-          {/* Main Content */}
+          {/* Main Content - flex layout so chart resizes with card when using GridStack */}
           {!isLoading && !error && ekompaunData.length > 0 && (
-            <ScrollArea className="flex-1 min-h-0">
-              <div className="space-y-4 pr-4">
-                {/* Overall Summary Cards */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 rounded-lg p-4 border border-blue-500/30">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-white/70">Total Records</span>
-                      <FileText className="h-4 w-4 text-blue-400" />
+            <div className="flex flex-col flex-1 min-h-0 gap-4 overflow-hidden">
+                {/* Summary row - compact and aligned */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 flex-shrink-0">
+                  <div className="bg-white/5 rounded-lg p-3 sm:p-4 border border-white/10">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-white/60 truncate">Total Records</span>
+                      <FileText className="h-4 w-4 text-blue-400 shrink-0" />
                     </div>
-                    <div className="text-2xl font-bold text-white">
+                    <p className="text-lg sm:text-xl font-bold text-white mt-1 tabular-nums">
                       {totalRecords.toLocaleString()}
-                    </div>
-                    <div className="text-xs text-white/50 mt-1">
-                      Year 2025
-                    </div>
+                    </p>
+                    <p className="text-[10px] sm:text-xs text-white/50 mt-0.5">Year 2025</p>
                   </div>
-                  
-                  <div className="bg-gradient-to-br from-green-500/20 to-green-600/10 rounded-lg p-4 border border-green-500/30">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-white/70">Jenis Kompaun</span>
-                      <TrendingUp className="h-4 w-4 text-green-400" />
+                  <div className="bg-white/5 rounded-lg p-3 sm:p-4 border border-white/10">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-white/60 truncate">Jenis Kompaun</span>
+                      <TrendingUp className="h-4 w-4 text-green-400 shrink-0" />
                     </div>
-                    <div className="text-2xl font-bold text-white">
-                      {summary?.jenis_kompaun_count || ekompaunData.length}
-                    </div>
-                    <div className="text-xs text-white/50 mt-1">
-                      Categories
-                    </div>
+                    <p className="text-lg sm:text-xl font-bold text-white mt-1 tabular-nums">
+                      {summary?.jenis_kompaun_count ?? ekompaunData.length}
+                    </p>
+                    <p className="text-[10px] sm:text-xs text-white/50 mt-0.5">Categories</p>
                   </div>
-                  
-                  <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/10 rounded-lg p-4 border border-purple-500/30">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-white/70">Year</span>
-                      <Calendar className="h-4 w-4 text-purple-400" />
+                  <div className="bg-white/5 rounded-lg p-3 sm:p-4 border border-white/10">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-white/60 truncate">Year</span>
+                      <Calendar className="h-4 w-4 text-purple-400 shrink-0" />
                     </div>
-                    <div className="text-2xl font-bold text-white">
-                      {summary?.year || 2025}
-                    </div>
-                    <div className="text-xs text-white/50 mt-1">
-                      Filter period
-                    </div>
+                    <p className="text-lg sm:text-xl font-bold text-white mt-1 tabular-nums">
+                      {summary?.year ?? 2025}
+                    </p>
+                    <p className="text-[10px] sm:text-xs text-white/50 mt-0.5">Filter period</p>
                   </div>
                 </div>
 
-                {/* Pie Chart */}
-                <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-                  <h3 className="text-sm font-semibold text-white/90 mb-3 text-center">
+                {/* Pie chart - takes remaining space, stable height for Chart.js */}
+                <div
+                  ref={chartWrapperRef}
+                  className="flex flex-col flex-1 min-h-[220px] rounded-lg border border-white/10 bg-white/5 overflow-hidden"
+                >
+                  <h3 className="text-xs sm:text-sm font-medium text-white/90 px-3 py-2 text-center border-b border-white/10 flex-shrink-0">
                     Distribution by Jenis Kompaun
                   </h3>
-                  <div className="h-80">
-                    <Pie data={pieChartData} options={chartOptions} />
+                  <div className="flex-1 min-h-0 w-full p-2 sm:p-3">
+                    <div className="h-full w-full min-h-[180px]">
+                      <Pie data={pieChartData} options={chartOptions} />
+                    </div>
                   </div>
                 </div>
 
-                {/* Jenis Kompaun Breakdown Cards */}
-                <div>
-                  <h3 className="text-sm font-semibold text-white/90 mb-3">Jenis Kompaun Breakdown</h3>
-                  <div className="grid grid-cols-2 gap-3">
+                {/* Breakdown list - fixed max height, scrollable */}
+                <div className="flex flex-col flex-shrink-0 min-h-0 max-h-[220px]">
+                  <h3 className="text-xs sm:text-sm font-medium text-white/90 mb-2 flex-shrink-0">
+                    Jenis Kompaun Breakdown
+                  </h3>
+                  <div className="overflow-y-auto overflow-x-hidden pr-1 space-y-2 min-h-0 [scrollbar-gutter:stable]">
                     {ekompaunData.map((item, index) => {
-                      const percentage = totalRecords > 0 ? ((item.total / totalRecords) * 100) : 0;
+                      const percentage = totalRecords > 0 ? (item.total / totalRecords) * 100 : 0;
                       const color = getColorForJenisKompaun(item.jenis_kompaun, index);
                       return (
                         <div
                           key={item.jenis_kompaun}
-                          className="bg-white/5 rounded-lg p-4 border border-white/10 hover:bg-white/10 transition-colors"
-                          style={{ borderLeftColor: color, borderLeftWidth: '4px' }}
+                          className="flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2 hover:bg-white/10 transition-colors"
+                          style={{ borderLeftWidth: 3, borderLeftColor: color }}
                         >
-                          <div className="flex items-start justify-between mb-2">
-                            <div className="flex-1">
-                              <div className="text-sm font-semibold text-white">{item.jenis_kompaun}</div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-white truncate">
+                              {item.jenis_kompaun}
+                            </p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden min-w-0">
+                                <div
+                                  className="h-full rounded-full transition-all"
+                                  style={{ width: `${percentage}%`, backgroundColor: color }}
+                                />
+                              </div>
+                              <span className="text-[10px] text-white/60 w-10 text-right shrink-0 tabular-nums">
+                                {percentage.toFixed(1)}%
+                              </span>
                             </div>
-                            <Badge 
-                              className="text-xs"
-                              style={{ 
-                                backgroundColor: color + '20',
-                                color: color,
-                                borderColor: color + '50'
-                              }}
-                            >
-                              {item.total}
-                            </Badge>
                           </div>
-                          <div className="text-xl font-bold text-white mb-1">
+                          <Badge
+                            variant="secondary"
+                            className="shrink-0 text-xs font-semibold tabular-nums"
+                            style={{
+                              backgroundColor: `${color}20`,
+                              color,
+                              borderColor: `${color}40`,
+                            }}
+                          >
                             {item.total.toLocaleString()}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
-                              <div
-                                className="h-full rounded-full transition-all"
-                                style={{
-                                  width: `${percentage}%`,
-                                  backgroundColor: color,
-                                }}
-                              />
-                            </div>
-                            <span className="text-xs text-white/60 w-12 text-right">
-                              {percentage.toFixed(1)}%
-                            </span>
-                          </div>
+                          </Badge>
                         </div>
                       );
                     })}
                   </div>
                 </div>
-              </div>
-            </ScrollArea>
+            </div>
           )}
 
           {/* Empty State */}
           {!isLoading && !error && ekompaunData.length === 0 && (
-            <div className="flex items-center justify-center h-full">
+            <div className="flex flex-1 items-center justify-center min-h-[200px]">
               <div className="text-center">
-                <FileText className="h-8 w-8 text-white/40 mx-auto mb-2" />
+                <FileText className="h-10 w-10 text-white/40 mx-auto mb-3" />
                 <p className="text-white/70 text-sm">No compound data available</p>
               </div>
             </div>

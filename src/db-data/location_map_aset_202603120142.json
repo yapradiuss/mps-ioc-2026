@@ -1,0 +1,20 @@
+{
+	"location_map_aset": [
+		{
+			"id": 1,
+			"no_uuid": 20,
+			"no_siri": "MPS/20/TK/2021/1-10",
+			"jenis_pokok": "FICUS BENJAMINA",
+			"loc_desc": "",
+			"loc_addr1": "4 JALAN ST 1C/4",
+			"loc_addr2": "",
+			"loc_addr3": "MEDAN 88",
+			"loc_postcode": "43900",
+			"loc_city": "SEPANG",
+			"loc_state": "SELANGOR",
+			"lat_map": "2.8114493933976386",
+			"long_map": "101.74060884565414",
+			"geom": "POINT (11325712.769695845 313094.7835379542)"
+		}
+	]
+}

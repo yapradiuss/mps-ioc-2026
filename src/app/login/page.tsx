@@ -104,7 +104,9 @@ function LoginForm() {
               loading="eager"
             />
           </div>
-          <CardTitle className="text-3xl font-bold">MPSepang Admin</CardTitle>
+          <CardTitle className="text-3xl font-bold">
+            Majlis Perbandaran Sepang IOC Dashboard
+          </CardTitle>
           <CardDescription>Sign in to your account to continue</CardDescription>
         </CardHeader>
         <CardContent>

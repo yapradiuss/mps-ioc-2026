@@ -14,7 +14,6 @@ import { Bar, Doughnut } from 'react-chartjs-2';
 import { Receipt, TrendingUp, Maximize2, DollarSign, FileText, AlertCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 const TAX_ANALYTICS_DB_DATA_URL = "/api/db-data/maklumat_akaun_analytics";
 
 // Register Chart.js components
@@ -79,6 +78,7 @@ export default function TaxAnalytics({
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const cardRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(800);
   const [taxData, setTaxData] = useState<TaxData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +87,18 @@ export default function TaxAnalytics({
   const MAX_WIDTH = 1200;
   const MIN_HEIGHT = 800;
   const MAX_HEIGHT = 1200;
+
+  // Track card width so charts (legend, layout) can respond to GridStack size
+  useEffect(() => {
+    if (!disableInternalPositioning || !cardRef.current) return;
+    const el = cardRef.current;
+    const ro = new ResizeObserver(entries => {
+      const { width } = entries[0]?.contentRect ?? {};
+      if (typeof width === "number" && width > 0) setContainerWidth(width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [disableInternalPositioning]);
 
   useEffect(() => {
     if (disableInternalPositioning && initialSize && (initialSize.width !== size.width || initialSize.height !== size.height)) {
@@ -325,12 +337,12 @@ export default function TaxAnalytics({
     maintainAspectRatio: false,
     plugins: {
       legend: {
-        position: 'bottom' as const,
+        position: (containerWidth < 520 ? 'bottom' : 'top') as 'top' | 'left' | 'bottom' | 'right',
         labels: {
           color: '#fff',
           padding: 8,
           font: {
-            size: 10,
+            size: containerWidth < 520 ? 9 : 10,
           },
         },
       },
@@ -385,12 +397,12 @@ export default function TaxAnalytics({
     maintainAspectRatio: false,
     plugins: {
       legend: {
-        position: 'right' as const,
+        position: (containerWidth < 640 ? 'bottom' : 'right') as 'top' | 'left' | 'bottom' | 'right',
         labels: {
           color: '#fff',
           padding: 8,
           font: {
-            size: 10,
+            size: containerWidth < 640 ? 9 : 10,
           },
         },
       },
@@ -416,190 +428,152 @@ export default function TaxAnalytics({
   return (
     <div
       ref={cardRef}
-      className={`${disableInternalPositioning ? "relative w-full h-full min-h-0 overflow-hidden flex flex-col" : "fixed"} z-[90] select-none ${!disableInternalPositioning && isDragging ? "cursor-grabbing" : ""} ${!disableInternalPositioning && isResizing ? "cursor-nwse-resize" : ""}`}
+      className={`${disableInternalPositioning ? "relative w-full h-full min-h-0 overflow-hidden flex flex-col" : "fixed"} z-[90] select-none ${
+        !disableInternalPositioning && isDragging ? "cursor-grabbing" : ""
+      } ${!disableInternalPositioning && isResizing ? "cursor-nwse-resize" : ""}`}
       style={{
-        ...(disableInternalPositioning ? { width: "100%", height: "100%" } : {
-          left: `${position.x}px`,
-          top: `${position.y}px`,
-          width: `${size.width}px`,
-          height: `${size.height}px`,
-        }),
+        ...(disableInternalPositioning
+          ? { width: "100%", height: "100%" }
+          : {
+              left: `${position.x}px`,
+              top: `${position.y}px`,
+              width: `${size.width}px`,
+              height: `${size.height}px`,
+            }),
         userSelect: "none",
         WebkitUserSelect: "none",
         MozUserSelect: "none",
         msUserSelect: "none",
       }}
     >
-      <Card className={`bg-background/10 backdrop-blur-2xl border border-white/10 shadow-lg flex flex-col ${disableInternalPositioning ? "flex-1 min-h-0" : "h-full"}`}>
-        <CardHeader 
+      <Card
+        className={`rounded-xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-xl flex flex-col ${
+          disableInternalPositioning ? "flex-1 min-h-0" : "h-full"
+        }`}
+      >
+        <CardHeader
           data-drag-handle
-          className="pb-3 cursor-grab active:cursor-grabbing border-b border-white/10 select-none flex-shrink-0"
+          className="py-3 px-4 cursor-grab active:cursor-grabbing border-b border-white/10 select-none flex-shrink-0"
           onMouseDown={disableInternalPositioning ? undefined : handleMouseDown}
           style={{ cursor: disableInternalPositioning ? "default" : "grab" }}
         >
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-white font-semibold flex items-center gap-2 text-lg">
-              <Receipt className="text-green-400 h-5 w-5" />
-              Tax Analytics Summary
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-white font-semibold flex items-center gap-2 text-base truncate">
+              <Receipt className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-400 shrink-0" />
+              <span className="truncate">Tax Analytics Summary</span>
             </CardTitle>
-            <div className="flex items-center gap-1 text-xs text-white/70">
-              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+            <span className="flex items-center gap-1.5 text-[10px] sm:text-xs text-white/60 shrink-0">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               Live
-            </div>
+            </span>
           </div>
         </CardHeader>
-        <CardContent className="pt-4 flex-1 min-h-0 overflow-hidden flex flex-col">
-          {/* Loading State */}
+
+        <CardContent className="p-3 sm:p-4 flex-1 min-h-0 overflow-hidden flex flex-col">
+          {/* Loading */}
           {isLoading && (
-            <div className="flex items-center justify-center h-full">
+            <div className="flex flex-1 items-center justify-center min-h-[220px]">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-2"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-2 border-white/20 border-t-white mx-auto mb-3" />
                 <p className="text-white/70 text-sm">Loading tax data...</p>
               </div>
             </div>
           )}
-          
-          {/* Error State */}
+
+          {/* Error */}
           {error && !isLoading && (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center">
-                <AlertCircle className="h-8 w-8 text-red-400 mx-auto mb-2" />
-                <p className="text-red-400 text-sm mb-2">Error loading data</p>
-                <p className="text-white/50 text-xs">{error}</p>
+            <div className="flex flex-1 items-center justify-center min-h-[220px]">
+              <div className="text-center max-w-[260px]">
+                <AlertCircle className="h-10 w-10 text-red-400 mx-auto mb-3" />
+                <p className="text-red-400 text-sm font-medium mb-1">Error loading data</p>
+                <p className="text-white/50 text-xs leading-relaxed">{error}</p>
               </div>
             </div>
           )}
-          
-          {/* Main Content */}
+
+          {/* Main content */}
           {!isLoading && !error && taxData.length > 0 && (
-            <ScrollArea className="flex-1 min-h-0">
-              <div className="space-y-4 pr-4">
-                {/* Overall Summary Cards */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-gradient-to-br from-green-500/20 to-green-600/10 rounded-lg p-4 border border-green-500/30">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-white/70">Total Amount Due</span>
-                      <DollarSign className="h-4 w-4 text-green-400" />
-                    </div>
-                    <div className="text-2xl font-bold text-white">
-                      RM {totalAmountDue.toLocaleString()}
-                    </div>
-                    <div className="text-xs text-white/50 mt-1">
-                      {totalItems.toLocaleString()} accounts
-                    </div>
+            <div className="flex flex-col flex-1 min-h-0 gap-4 overflow-hidden">
+              {/* Summary row */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 flex-shrink-0 min-w-0">
+                <div className="bg-white/5 rounded-lg p-3 sm:p-4 border border-emerald-400/40">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-white/60 truncate">Total Amount Due</span>
+                    <DollarSign className="h-4 w-4 text-emerald-400 shrink-0" />
                   </div>
-                  
-                  <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 rounded-lg p-4 border border-blue-500/30">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-white/70">Total Collections</span>
-                      <TrendingUp className="h-4 w-4 text-blue-400" />
-                    </div>
-                    <div className="text-2xl font-bold text-white">
-                      RM {totalAmount.toLocaleString()}
-                    </div>
-                    <div className="text-xs text-white/50 mt-1">
-                      All categories
-                    </div>
+                  <p className="text-base sm:text-xl font-bold text-white mt-1 tabular-nums truncate">
+                    RM {totalAmountDue.toLocaleString()}
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-white/50 mt-0.5">
+                    {totalItems.toLocaleString()} accounts
+                  </p>
+                </div>
+
+                <div className="bg-white/5 rounded-lg p-3 sm:p-4 border border-sky-400/40">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-white/60 truncate">Total Collections</span>
+                    <TrendingUp className="h-4 w-4 text-sky-400 shrink-0" />
                   </div>
-                  
-                  <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/10 rounded-lg p-4 border border-purple-500/30">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs text-white/70">Total Accounts</span>
-                      <FileText className="h-4 w-4 text-purple-400" />
-                    </div>
-                    <div className="text-2xl font-bold text-white">
-                      {totalItems.toLocaleString()}
-                    </div>
-                    <div className="text-xs text-white/50 mt-1">
-                      Active records
-                    </div>
+                  <p className="text-base sm:text-xl font-bold text-white mt-1 tabular-nums truncate">
+                    RM {totalAmount.toLocaleString()}
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-white/50 mt-0.5">All categories</p>
+                </div>
+
+                <div className="bg-white/5 rounded-lg p-3 sm:p-4 border border-purple-400/40">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-white/60 truncate">Total Accounts</span>
+                    <FileText className="h-4 w-4 text-purple-400 shrink-0" />
+                  </div>
+                  <p className="text-base sm:text-xl font-bold text-white mt-1 tabular-nums truncate">
+                    {totalItems.toLocaleString()}
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-white/50 mt-0.5">Active records</p>
+                </div>
+              </div>
+
+              {/* Charts row */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 flex-1 min-h-[220px]">
+                <div className="bg-white/5 rounded-lg border border-white/10 p-3 sm:p-4 flex flex-col min-w-0">
+                  <h3 className="text-[11px] sm:text-sm font-medium text-white/90 mb-2 text-center truncate">
+                    Amount Distribution
+                  </h3>
+                  <div className="flex-1 min-h-[160px] min-w-0">
+                    <Bar data={barChartData} options={chartOptions} />
                   </div>
                 </div>
 
-                {/* Category Summary Cards Grid */}
-                <div>
-                  <h3 className="text-sm font-semibold text-white/90 mb-3">Category Breakdown</h3>
-                  <div className="grid grid-cols-2 gap-3">
-                    {chartData.map((item) => {
-                      const percentage = totalAmount > 0 ? ((item.amount / totalAmount) * 100) : 0;
-                      return (
-                        <div
-                          key={item.category}
-                          className="bg-white/5 rounded-lg p-4 border border-white/10 hover:bg-white/10 transition-colors"
-                          style={{ borderLeftColor: CATEGORY_COLORS[item.category], borderLeftWidth: '4px' }}
-                        >
-                          <div className="flex items-start justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-lg">{CATEGORY_ICONS[item.category]}</span>
-                              <div>
-                                <div className="text-sm font-semibold text-white">{item.label}</div>
-                                <div className="text-xs text-white/60">{item.shortLabel}</div>
-                              </div>
-                            </div>
-                            <Badge 
-                              className="text-xs"
-                              style={{ 
-                                backgroundColor: CATEGORY_COLORS[item.category] + '20',
-                                color: CATEGORY_COLORS[item.category],
-                                borderColor: CATEGORY_COLORS[item.category] + '50'
-                              }}
-                            >
-                              {item.count}
-                            </Badge>
-                          </div>
-                          <div className="text-xl font-bold text-white mb-1">
-                            RM {item.amount.toLocaleString()}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 h-2 bg-white/10 rounded-full overflow-hidden">
-                              <div
-                                className="h-full rounded-full transition-all"
-                                style={{
-                                  width: `${percentage}%`,
-                                  backgroundColor: CATEGORY_COLORS[item.category],
-                                }}
-                              />
-                            </div>
-                            <span className="text-xs text-white/60 w-12 text-right">
-                              {percentage.toFixed(1)}%
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Charts Section */}
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Bar Chart */}
-                  <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-                    <h3 className="text-sm font-semibold text-white/90 mb-3 text-center">Amount Distribution</h3>
-                    <div className="h-64">
-                      <Bar data={barChartData} options={chartOptions} />
-                    </div>
-                  </div>
-
-                  {/* Doughnut Chart */}
-                  <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-                    <h3 className="text-sm font-semibold text-white/90 mb-3 text-center">Percentage Breakdown</h3>
-                    <div className="h-64">
-                      <Doughnut data={doughnutChartData} options={doughnutOptions} />
-                    </div>
+                <div className="bg-white/5 rounded-lg border border-white/10 p-3 sm:p-4 flex flex-col min-w-0">
+                  <h3 className="text-[11px] sm:text-sm font-medium text-white/90 mb-2 text-center truncate">
+                    Percentage Breakdown
+                  </h3>
+                  <div className="flex-1 min-h-[160px] min-w-0">
+                    <Doughnut data={doughnutChartData} options={doughnutOptions} />
                   </div>
                 </div>
               </div>
-            </ScrollArea>
+
+            </div>
+          )}
+
+          {/* Empty */}
+          {!isLoading && !error && taxData.length === 0 && (
+            <div className="flex flex-1 items-center justify-center min-h-[220px]">
+              <div className="text-center">
+                <FileText className="h-10 w-10 text-white/40 mx-auto mb-3" />
+                <p className="text-white/70 text-sm">No tax analytics data available</p>
+              </div>
+            </div>
           )}
         </CardContent>
-        
-        {/* Resize Handle */}
+
         {!disableInternalPositioning && (
           <div
             className="absolute bottom-0 right-0 w-6 h-6 cursor-nwse-resize flex items-center justify-center group"
             onMouseDown={handleResizeStart}
             style={{
-              background: "linear-gradient(to top left, transparent 0%, transparent 45%, rgba(255,255,255,0.1) 45%, rgba(255,255,255,0.1) 100%)",
+              background:
+                "linear-gradient(to top left, transparent 0%, transparent 45%, rgba(255,255,255,0.1) 45%, rgba(255,255,255,0.1) 100%)",
             }}
           >
             <Maximize2 className="h-3 w-3 text-white/40 group-hover:text-white/70 transition-colors" />

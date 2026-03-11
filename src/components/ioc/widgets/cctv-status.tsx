@@ -109,6 +109,7 @@ export default function CCTVStatus({
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const cardRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(initialSize.width);
   const [cctvs, setCctvs] = useState<CCTV[]>(mockCCTVs);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -128,6 +129,18 @@ export default function CCTVStatus({
       setSize(initialSize);
     }
   }, [disableInternalPositioning, initialSize?.width, initialSize?.height]);
+
+  // When wrapped in GridStack, track rendered width so layout can respond to card size
+  useEffect(() => {
+    if (!disableInternalPositioning || !cardRef.current) return;
+    const el = cardRef.current;
+    const ro = new ResizeObserver(entries => {
+      const { width } = entries[0]?.contentRect ?? {};
+      if (typeof width === "number" && width > 0) setContainerWidth(width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [disableInternalPositioning]);
 
   // Fetch CCTV status from API with batch loading and frontend caching
   const fetchCCTVStatus = async (forceRefresh = false) => {
@@ -272,13 +285,11 @@ export default function CCTVStatus({
   const offlineCount = cctvs.filter(c => c.status === "offline").length;
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Only allow dragging from the header
+    if (disableInternalPositioning) return;
     if (e.target instanceof HTMLElement && !e.target.closest('[data-drag-handle]')) {
       return;
     }
-    
     if (!cardRef.current) return;
-    
     e.preventDefault();
     const rect = cardRef.current.getBoundingClientRect();
     setDragOffset({
@@ -365,41 +376,49 @@ export default function CCTVStatus({
     setIsResizing(true);
   };
 
-  // Determine if card is wide enough for 2-column layout
-  const isWide = size.width >= 600;
-  const isCompact = size.width < 350;
+  // Determine layout based on current rendered width (GridStack or internal size)
+  const effectiveWidth = disableInternalPositioning ? containerWidth : size.width;
+  const isWide = effectiveWidth >= 600;
+  const isCompact = effectiveWidth < 350;
 
   return (
     <div
       ref={cardRef}
-      className={`${disableInternalPositioning ? "relative w-full h-full overflow-hidden" : "fixed"} z-[90] select-none ${!disableInternalPositioning && isDragging ? "cursor-grabbing" : ""} ${!disableInternalPositioning && isResizing ? "cursor-nwse-resize" : ""}`}
+      className={`${disableInternalPositioning ? "relative w-full h-full min-h-0 overflow-hidden flex flex-col" : "fixed"} z-[90] select-none ${
+        !disableInternalPositioning && isDragging ? "cursor-grabbing" : ""
+      } ${!disableInternalPositioning && isResizing ? "cursor-nwse-resize" : ""}`}
       style={{
-        ...(disableInternalPositioning ? { width: "100%", height: "100%" } : {
-          left: `${position.x}px`,
-          top: `${position.y}px`,
-          width: `${size.width}px`,
-          height: `${size.height}px`,
-        }),
+        ...(disableInternalPositioning
+          ? { width: "100%", height: "100%" }
+          : {
+              left: `${position.x}px`,
+              top: `${position.y}px`,
+              width: `${size.width}px`,
+              height: `${size.height}px`,
+            }),
         userSelect: "none",
         WebkitUserSelect: "none",
         MozUserSelect: "none",
         msUserSelect: "none",
       }}
     >
-      <Card className="bg-background/10 backdrop-blur-2xl border border-white/10 shadow-lg h-full flex flex-col">
+      <Card
+        className={`rounded-xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-xl flex flex-col ${
+          disableInternalPositioning ? "flex-1 min-h-0" : "h-full"
+        }`}
+      >
         <CardHeader 
           data-drag-handle
-          className="pb-3 border-b border-white/10 select-none flex-shrink-0"
+          className="py-3 px-4 border-b border-white/10 select-none flex-shrink-0"
           onMouseDown={disableInternalPositioning ? undefined : handleMouseDown}
           style={{ cursor: disableInternalPositioning ? "default" : "grab" }}
         >
-          <div className="flex items-center justify-between">
-            <CardTitle className={`text-white font-semibold flex items-center gap-2 ${isCompact ? "text-sm" : "text-lg"}`}>
-              <Video className={`text-red-400 ${isCompact ? "h-4 w-4" : "h-5 w-5"}`} />
-              {!isCompact && "CCTV Status"}
-              {isCompact && "CCTV"}
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className={`text-white font-semibold flex items-center gap-2 text-base truncate`}>
+              <Video className={`text-red-400 ${isCompact ? "h-4 w-4" : "h-5 w-5"} shrink-0`} />
+              <span className="truncate">{isCompact ? "CCTV" : "CCTV Status"}</span>
             </CardTitle>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => fetchCCTVStatus(true)}
                 disabled={isLoading}
@@ -408,14 +427,18 @@ export default function CCTVStatus({
               >
                 <RefreshCw className={`h-3 w-3 text-white/70 ${isLoading ? 'animate-spin' : ''}`} />
               </button>
-              <div className="flex items-center gap-1 text-xs text-white/70">
-                <span className={`w-2 h-2 rounded-full ${isLoading ? 'bg-yellow-400' : 'bg-green-400'} ${!isLoading ? 'animate-pulse' : ''}`}></span>
-                {isLoading ? 'Loading...' : 'Live'}
-              </div>
+              <span className="flex items-center gap-1 text-[10px] sm:text-xs text-white/70">
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    isLoading ? "bg-yellow-400" : "bg-green-400"
+                  } ${!isLoading ? "animate-pulse" : ""}`}
+                />
+                {isLoading ? "Loading..." : "Live"}
+              </span>
             </div>
           </div>
         </CardHeader>
-        <CardContent className="pt-4 flex-1 min-h-0 overflow-hidden flex flex-col">
+        <CardContent className="p-3 sm:p-4 flex-1 min-h-0 overflow-hidden flex flex-col">
           {/* Error Message */}
           {error && (
             <div className="mb-4 p-2 bg-red-500/20 border border-red-500/30 rounded-lg flex items-center gap-2">
@@ -425,15 +448,15 @@ export default function CCTVStatus({
           )}
 
           {/* Summary Stats */}
-          <div className={`grid gap-2 mb-4 ${isCompact ? "grid-cols-2" : "grid-cols-2"}`}>
-            <div className="bg-white/5 rounded-lg p-2 text-center">
+          <div className={`grid gap-2 mb-3 sm:mb-4 grid-cols-2 min-w-0`}>
+            <div className="bg-white/5 rounded-lg p-2 text-center min-w-0">
               <div className={`flex items-center justify-center gap-1 mb-1 ${isCompact ? "flex-col" : ""}`}>
                 <CheckCircle2 className={`text-green-400 ${isCompact ? "h-3 w-3" : "h-4 w-4"}`} />
                 <span className={`font-bold text-white ${isCompact ? "text-lg" : "text-2xl"}`}>{onlineCount}</span>
               </div>
               <p className={`text-white/70 ${isCompact ? "text-[10px]" : "text-xs"}`}>Online</p>
             </div>
-            <div className="bg-white/5 rounded-lg p-2 text-center">
+            <div className="bg-white/5 rounded-lg p-2 text-center min-w-0">
               <div className={`flex items-center justify-center gap-1 mb-1 ${isCompact ? "flex-col" : ""}`}>
                 <CameraOff className={`text-red-400 ${isCompact ? "h-3 w-3" : "h-4 w-4"}`} />
                 <span className={`font-bold text-white ${isCompact ? "text-lg" : "text-2xl"}`}>{offlineCount}</span>
@@ -443,7 +466,11 @@ export default function CCTVStatus({
           </div>
 
           {/* CCTV List */}
-          <div className={`space-y-2 overflow-y-auto flex-1 ${isWide ? "grid grid-cols-2 gap-2" : ""}`}>
+          <div
+            className={`flex-1 min-h-0 overflow-y-auto ${
+              isWide ? "grid grid-cols-2 gap-2" : "space-y-2"
+            }`}
+          >
             {isLoading && cctvs.length === 0 ? (
               <div className="flex items-center justify-center py-8">
                 <RefreshCw className="h-6 w-6 text-white/50 animate-spin" />
@@ -458,7 +485,9 @@ export default function CCTVStatus({
               cctvs.map((cctv) => (
               <div
                 key={cctv.id}
-                className={`bg-white/5 rounded-lg border border-white/5 hover:bg-white/10 transition-colors ${isWide ? "p-2" : "p-3"}`}
+                className={`bg-white/5 rounded-lg border border-white/5 hover:bg-white/10 transition-colors ${
+                  isWide ? "p-2" : "p-3"
+                } min-w-0`}
               >
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <div className="flex items-center gap-2 flex-1 min-w-0">

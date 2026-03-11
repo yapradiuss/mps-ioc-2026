@@ -1,0 +1,15 @@
+{
+	"pasar_tani": [
+		{
+			"gid": 1,
+			"id": null,
+			"nama": "Pasar Tani Taman Tasik Cyberjaya",
+			"lokasi": "Cyberjaya",
+			"bil_tapak": null,
+			"no_tapak": null,
+			"pemilik": null,
+			"operasi": "Ahad",
+			"geom": "MULTIPOLYGON (((11314935.4954523 327025.7373257018, 11314958.94560182 327044.7781610102, 11314983.305348538 327005.9334191335, 11314963.090558903 326991.41309572913, 11314935.4954523 327025.7373257018)))"
+		}
+	]
+}

@@ -25,16 +25,26 @@ import {
   type WidgetPreference 
 } from "@/lib/ioc-preferences";
 import { DraggableWidget } from "@/components/ioc/draggable-widget";
+import { GridStackWidget } from "@/components/ioc/gridstack-widget";
 import MapFilters from "@/components/ioc/map-filters";
+import WidgetContainer from "@/components/ioc/widget-container";
 import ExampleWidget from "@/components/ioc/widgets/example-widget";
 import WeatherWidget from "@/components/ioc/widgets/weather-widget";
 import StreetlightStatus from "@/components/ioc/widgets/streetlight-status";
 import CCTVStatus from "@/components/ioc/widgets/cctv-status";
 import AIBoxDetection from "@/components/ioc/widgets/aibox-detection";
 import CompoundChart from "@/components/ioc/widgets/compound-chart";
+import CarbonEmissionWidget from "@/components/ioc/widgets/carbon-emission";
 import TaxAnalytics from "@/components/ioc/widgets/tax-analytics";
-import VehicleCounting from "@/components/ioc/widgets/vehicle-counting";
-import HumanCounting from "@/components/ioc/widgets/human-counting";
+const VehicleCounting = dynamic(
+  () => import("@/components/ioc/widgets/vehicle-counting"),
+  { ssr: false }
+);
+
+const HumanCounting = dynamic(
+  () => import("@/components/ioc/widgets/human-counting"),
+  { ssr: false }
+);
 import { getActiveNewsTickerItems } from "@/lib/news-ticker-storage";
 import { API_BASE_URL } from "@/lib/api";
 
@@ -53,7 +63,8 @@ const GoogleMap = dynamic(() => import("@/components/ioc/google-map"), {
 
 // Default map filter state
 const DEFAULT_MAP_FILTERS = {
-  landmarks: false,
+  planMalaysia: false,
+  asetMPSepang: false,
   blokPerancangan: false,
   bridge: false,
   cctv: false,
@@ -92,11 +103,12 @@ const DEFAULT_MAP_FILTERS = {
   tamanPerumahan: false,
   trafficLight: false,
   wartaKawasanLapang: false,
-  zonAhliMajlis: false,
+  zonAhliMajlis: true,
 } as const;
 
 // Default widget visibility
 const DEFAULT_WIDGET_VISIBILITY = {
+  weather: true,
   streetlight: true,
   cctv: true,
   compound: true,
@@ -104,8 +116,11 @@ const DEFAULT_WIDGET_VISIBILITY = {
   aibox: true,
   vehicleCounting: true,
   humanCounting: true,
+  carbonEmission: false,
   example: false,
 } as const;
+
+type MapTheme = "light" | "dark";
 
 // Helper to get initial widget positions
 const getInitialWidgetPositions = () => {
@@ -120,6 +135,7 @@ const getInitialWidgetPositions = () => {
       tax: { x: 20, y: minY + 630 },
       vehicleCounting: { x: 20, y: minY + 780 },
       humanCounting: { x: 20, y: minY + 930 },
+      carbonEmission: { x: 20, y: minY + 1080 },
     };
   }
   const centerX = window.innerWidth / 2;
@@ -133,6 +149,7 @@ const getInitialWidgetPositions = () => {
     tax: { x: window.innerWidth - 350, y: minY + 430 },
     vehicleCounting: { x: window.innerWidth - 650, y: minY + 630 },
     humanCounting: { x: window.innerWidth - 650, y: minY + 780 },
+    carbonEmission: { x: centerX - 150, y: minY + 930 },
   };
 };
 
@@ -146,6 +163,7 @@ const getInitialWidgetSizes = () => ({
   tax: { width: 600, height: 700 },
   vehicleCounting: { width: 600, height: 500 },
   humanCounting: { width: 600, height: 500 },
+  carbonEmission: { width: 600, height: 360 },
 });
 
 export default function IOCDashboardPage() {
@@ -155,6 +173,7 @@ export default function IOCDashboardPage() {
   const [user, setUser] = useState<UserType | null>(null);
   const [newsItems, setNewsItems] = useState<string[]>([]);
   const [isLoadingNews, setIsLoadingNews] = useState(true);
+  const [mapTheme, setMapTheme] = useState<MapTheme>("dark");
   
   // Consolidated state for map filters
   const [mapFilters, setMapFilters] = useState<typeof DEFAULT_MAP_FILTERS>(DEFAULT_MAP_FILTERS);
@@ -349,12 +368,15 @@ export default function IOCDashboardPage() {
       }));
 
       const widgetPrefs: WidgetPreference[] = [
-        { id: 'weather', enabled: true, position: widgetPositions.weather, size: widgetSizes.weather },
+        { id: 'weather', enabled: widgetVisibility.weather, position: widgetPositions.weather, size: widgetSizes.weather },
         { id: 'streetlight', enabled: widgetVisibility.streetlight, position: widgetPositions.streetlight, size: widgetSizes.streetlight },
         { id: 'cctv', enabled: widgetVisibility.cctv, position: widgetPositions.cctv, size: widgetSizes.cctv },
         { id: 'aibox', enabled: widgetVisibility.aibox, position: widgetPositions.aibox, size: widgetSizes.aibox },
         { id: 'compound', enabled: widgetVisibility.compound, position: widgetPositions.compound, size: widgetSizes.compound },
         { id: 'tax', enabled: widgetVisibility.tax, position: widgetPositions.tax, size: widgetSizes.tax },
+        { id: 'carbonEmission', enabled: widgetVisibility.carbonEmission, position: widgetPositions.carbonEmission, size: widgetSizes.carbonEmission },
+        { id: 'vehicleCounting', enabled: widgetVisibility.vehicleCounting, position: widgetPositions.vehicleCounting, size: widgetSizes.vehicleCounting },
+        { id: 'humanCounting', enabled: widgetVisibility.humanCounting, position: widgetPositions.humanCounting, size: widgetSizes.humanCounting },
         { id: 'example', enabled: widgetVisibility.example },
       ];
 
@@ -533,108 +555,132 @@ export default function IOCDashboardPage() {
         </div>
       </header>
 
-      {/* Map Filters */}
-      <MapFilters {...mapFilterProps} />
+      {/* Map Filters - collapsible left sidebar with vertical label */}
+      <WidgetContainer
+        title="Map Filters"
+        icon={undefined}
+        defaultOpen={true}
+        defaultVisible={true}
+        position="left-center"
+      >
+        <MapFilters {...mapFilterProps} />
+      </WidgetContainer>
 
       {/* Weather Widget */}
-      <DraggableWidget
-        widgetId="weather"
-        initialPosition={widgetPositions.weather}
-        initialSize={widgetSizes.weather}
-        onPositionChange={(pos) => handleWidgetPositionChange('weather', pos)}
-        onSizeChange={(size) => handleWidgetSizeChange('weather', size)}
-      >
-        <WeatherWidget initialSize={widgetSizes.weather} />
-      </DraggableWidget>
+      {widgetVisibility.weather && (
+        <GridStackWidget
+          widgetId="weather"
+          initialPosition={widgetPositions.weather}
+          initialSize={widgetSizes.weather}
+          onPositionChange={(pos) => handleWidgetPositionChange("weather", pos)}
+          onSizeChange={(size) => handleWidgetSizeChange("weather", size)}
+        >
+          <WeatherWidget initialSize={widgetSizes.weather} />
+        </GridStackWidget>
+      )}
 
       {/* Other Widgets */}
       {widgetVisibility.streetlight && (
-        <DraggableWidget
+        <GridStackWidget
           widgetId="streetlight"
           initialPosition={widgetPositions.streetlight}
           initialSize={widgetSizes.streetlight}
-          onPositionChange={(pos) => handleWidgetPositionChange('streetlight', pos)}
-          onSizeChange={(size) => handleWidgetSizeChange('streetlight', size)}
+          onPositionChange={(pos) => handleWidgetPositionChange("streetlight", pos)}
+          onSizeChange={(size) => handleWidgetSizeChange("streetlight", size)}
         >
           <StreetlightStatus disableInternalPositioning={true} initialSize={widgetSizes.streetlight} />
-        </DraggableWidget>
+        </GridStackWidget>
       )}
 
       {widgetVisibility.cctv && (
-        <DraggableWidget
+        <GridStackWidget
           widgetId="cctv"
           initialPosition={widgetPositions.cctv}
           initialSize={widgetSizes.cctv}
-          onPositionChange={(pos) => handleWidgetPositionChange('cctv', pos)}
-          onSizeChange={(size) => handleWidgetSizeChange('cctv', size)}
+          onPositionChange={(pos) => handleWidgetPositionChange("cctv", pos)}
+          onSizeChange={(size) => handleWidgetSizeChange("cctv", size)}
         >
           <CCTVStatus disableInternalPositioning={true} initialSize={widgetSizes.cctv} />
-        </DraggableWidget>
+        </GridStackWidget>
       )}
 
       {widgetVisibility.aibox && (
-        <DraggableWidget
+        <GridStackWidget
           widgetId="aibox"
           initialPosition={widgetPositions.aibox}
           initialSize={widgetSizes.aibox}
-          onPositionChange={(pos) => handleWidgetPositionChange('aibox', pos)}
-          onSizeChange={(size) => handleWidgetSizeChange('aibox', size)}
+          onPositionChange={(pos) => handleWidgetPositionChange("aibox", pos)}
+          onSizeChange={(size) => handleWidgetSizeChange("aibox", size)}
         >
           <AIBoxDetection disableInternalPositioning={true} initialSize={widgetSizes.aibox} />
-        </DraggableWidget>
+        </GridStackWidget>
       )}
 
       {widgetVisibility.compound && (
-        <DraggableWidget
+        <GridStackWidget
           widgetId="compound"
           initialPosition={widgetPositions.compound}
           initialSize={widgetSizes.compound}
-          onPositionChange={(pos) => handleWidgetPositionChange('compound', pos)}
-          onSizeChange={(size) => handleWidgetSizeChange('compound', size)}
+          onPositionChange={(pos) => handleWidgetPositionChange("compound", pos)}
+          onSizeChange={(size) => handleWidgetSizeChange("compound", size)}
         >
           <CompoundChart disableInternalPositioning={true} initialSize={widgetSizes.compound} />
-        </DraggableWidget>
+        </GridStackWidget>
+      )}
+
+      {widgetVisibility.carbonEmission && (
+        <GridStackWidget
+          widgetId="carbonEmission"
+          initialPosition={widgetPositions.carbonEmission}
+          initialSize={widgetSizes.carbonEmission}
+          onPositionChange={(pos) => handleWidgetPositionChange("carbonEmission", pos)}
+          onSizeChange={(size) => handleWidgetSizeChange("carbonEmission", size)}
+        >
+          <CarbonEmissionWidget disableInternalPositioning={true} initialSize={widgetSizes.carbonEmission} />
+        </GridStackWidget>
       )}
 
       {widgetVisibility.tax && (
-        <DraggableWidget
+        <GridStackWidget
           widgetId="tax"
           initialPosition={widgetPositions.tax}
           initialSize={widgetSizes.tax}
-          onPositionChange={(pos) => handleWidgetPositionChange('tax', pos)}
-          onSizeChange={(size) => handleWidgetSizeChange('tax', size)}
+          onPositionChange={(pos) => handleWidgetPositionChange("tax", pos)}
+          onSizeChange={(size) => handleWidgetSizeChange("tax", size)}
         >
           <TaxAnalytics disableInternalPositioning={true} initialSize={widgetSizes.tax} />
-        </DraggableWidget>
+        </GridStackWidget>
       )}
 
       {widgetVisibility.vehicleCounting && (
-        <DraggableWidget
+        <GridStackWidget
           widgetId="vehicleCounting"
           initialPosition={widgetPositions.vehicleCounting}
           initialSize={widgetSizes.vehicleCounting}
-          onPositionChange={(pos) => handleWidgetPositionChange('vehicleCounting', pos)}
-          onSizeChange={(size) => handleWidgetSizeChange('vehicleCounting', size)}
+          onPositionChange={(pos) => handleWidgetPositionChange("vehicleCounting", pos)}
+          onSizeChange={(size) => handleWidgetSizeChange("vehicleCounting", size)}
         >
           <VehicleCounting disableInternalPositioning={true} initialSize={widgetSizes.vehicleCounting} />
-        </DraggableWidget>
+        </GridStackWidget>
       )}
 
       {widgetVisibility.humanCounting && (
-        <DraggableWidget
+        <GridStackWidget
           widgetId="humanCounting"
           initialPosition={widgetPositions.humanCounting}
           initialSize={widgetSizes.humanCounting}
-          onPositionChange={(pos) => handleWidgetPositionChange('humanCounting', pos)}
-          onSizeChange={(size) => handleWidgetSizeChange('humanCounting', size)}
+          onPositionChange={(pos) => handleWidgetPositionChange("humanCounting", pos)}
+          onSizeChange={(size) => handleWidgetSizeChange("humanCounting", size)}
         >
           <HumanCounting disableInternalPositioning={true} initialSize={widgetSizes.humanCounting} />
-        </DraggableWidget>
+        </GridStackWidget>
       )}
 
       <ExampleWidget
         defaultVisible={widgetVisibility.example}
         onVisibilityChange={(visible) => handleWidgetVisibilityChange('example', visible)}
+        weatherVisible={widgetVisibility.weather}
+        onWeatherVisibilityChange={(visible) => handleWidgetVisibilityChange('weather', visible)}
         streetlightVisible={widgetVisibility.streetlight}
         onStreetlightVisibilityChange={(visible) => handleWidgetVisibilityChange('streetlight', visible)}
         compoundVisible={widgetVisibility.compound}
@@ -645,6 +691,8 @@ export default function IOCDashboardPage() {
         onAiboxVisibilityChange={(visible) => handleWidgetVisibilityChange('aibox', visible)}
         cctvVisible={widgetVisibility.cctv}
         onCctvVisibilityChange={(visible) => handleWidgetVisibilityChange('cctv', visible)}
+        carbonEmissionVisible={widgetVisibility.carbonEmission}
+        onCarbonEmissionVisibilityChange={(visible) => handleWidgetVisibilityChange('carbonEmission', visible)}
         vehicleCountingVisible={widgetVisibility.vehicleCounting}
         onVehicleCountingVisibilityChange={(visible) => handleWidgetVisibilityChange('vehicleCounting', visible)}
         humanCountingVisible={widgetVisibility.humanCounting}
@@ -652,7 +700,7 @@ export default function IOCDashboardPage() {
         onSavePreferences={saveCurrentPreferences}
       />
 
-      {/* Main Content - Google Map */}
+      {/* Main Content - Google Map with theme selector */}
       <main className="relative pt-0">
         <div 
           className="w-full bg-muted" 
@@ -664,8 +712,40 @@ export default function IOCDashboardPage() {
             marginTop: '0'
           }}
         >
+          {/* Map theme selector */}
+          <div className="absolute z-[60] top-20 right-6 flex items-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/15">
+            <span className="text-[11px] text-white/70 uppercase tracking-wide">
+              Map Theme
+            </span>
+            <div className="flex rounded-full bg-black/40 border border-white/20 overflow-hidden text-[11px]">
+              <button
+                type="button"
+                onClick={() => setMapTheme("light")}
+                className={`px-2 py-0.5 ${
+                  mapTheme === "light"
+                    ? "bg-white text-slate-900 font-semibold"
+                    : "text-white/70"
+                }`}
+              >
+                Light
+              </button>
+              <button
+                type="button"
+                onClick={() => setMapTheme("dark")}
+                className={`px-2 py-0.5 ${
+                  mapTheme === "dark"
+                    ? "bg-white text-slate-900 font-semibold"
+                    : "text-white/70"
+                }`}
+              >
+                Dark
+              </button>
+            </div>
+          </div>
+
           <GoogleMap 
-            showLandmarks={mapFilters.landmarks}
+            showPlanMalaysia={mapFilters.planMalaysia}
+            showAsetMPSepang={mapFilters.asetMPSepang}
             showBlokPerancangan={mapFilters.blokPerancangan}
             showBridge={mapFilters.bridge}
             showCCTV={mapFilters.cctv}
@@ -705,6 +785,7 @@ export default function IOCDashboardPage() {
             showTrafficLight={mapFilters.trafficLight}
             showWartaKawasanLapang={mapFilters.wartaKawasanLapang}
             showZonAhliMajlis={mapFilters.zonAhliMajlis}
+            mapTheme={mapTheme}
             onMapLoad={() => {
               setTimeout(() => {
                 if (typeof window !== 'undefined' && window.google?.maps) {

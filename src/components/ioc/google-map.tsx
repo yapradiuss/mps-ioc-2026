@@ -8,10 +8,140 @@ declare global {
   }
 }
 
+function getBaseStyles(landmarksEnabled: boolean) {
+  if (landmarksEnabled) return [];
+  return [
+    {
+      featureType: "poi",
+      elementType: "labels",
+      stylers: [{ visibility: "off" }],
+    },
+    {
+      featureType: "poi.business",
+      stylers: [{ visibility: "off" }],
+    },
+    {
+      featureType: "poi.attraction",
+      stylers: [{ visibility: "off" }],
+    },
+    {
+      featureType: "poi.place_of_worship",
+      stylers: [{ visibility: "off" }],
+    },
+    {
+      featureType: "poi.school",
+      stylers: [{ visibility: "off" }],
+    },
+    {
+      featureType: "poi.sports_complex",
+      stylers: [{ visibility: "off" }],
+    },
+  ];
+}
+
+// Night mode styles from Google Maps sample
+function getDarkStyles(landmarksEnabled: boolean) {
+  const nightStyles = [
+    { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+    { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+    { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+    {
+      featureType: "administrative.locality",
+      elementType: "labels.text.fill",
+      stylers: [{ color: "#d59563" }],
+    },
+    {
+      featureType: "poi",
+      elementType: "labels.text.fill",
+      stylers: [{ color: "#d59563" }],
+    },
+    {
+      featureType: "poi.park",
+      elementType: "geometry",
+      stylers: [{ color: "#263c3f" }],
+    },
+    {
+      featureType: "poi.park",
+      elementType: "labels.text.fill",
+      stylers: [{ color: "#6b9a76" }],
+    },
+    {
+      featureType: "road",
+      elementType: "geometry",
+      stylers: [{ color: "#38414e" }],
+    },
+    {
+      featureType: "road",
+      elementType: "geometry.stroke",
+      stylers: [{ color: "#212a37" }],
+    },
+    {
+      featureType: "road",
+      elementType: "labels.text.fill",
+      stylers: [{ color: "#9ca5b3" }],
+    },
+    {
+      featureType: "road.highway",
+      elementType: "geometry",
+      stylers: [{ color: "#746855" }],
+    },
+    {
+      featureType: "road.highway",
+      elementType: "geometry.stroke",
+      stylers: [{ color: "#1f2835" }],
+    },
+    {
+      featureType: "road.highway",
+      elementType: "labels.text.fill",
+      stylers: [{ color: "#f3d19c" }],
+    },
+    {
+      featureType: "transit",
+      elementType: "geometry",
+      stylers: [{ color: "#2f3948" }],
+    },
+    {
+      featureType: "transit.station",
+      elementType: "labels.text.fill",
+      stylers: [{ color: "#d59563" }],
+    },
+    {
+      featureType: "water",
+      elementType: "geometry",
+      stylers: [{ color: "#17263c" }],
+    },
+    {
+      featureType: "water",
+      elementType: "labels.text.fill",
+      stylers: [{ color: "#515c6d" }],
+    },
+    {
+      featureType: "water",
+      elementType: "labels.text.stroke",
+      stylers: [{ color: "#17263c" }],
+    },
+  ];
+
+  // Still respect landmark toggle by hiding POI labels if disabled
+  if (!landmarksEnabled) {
+    nightStyles.push({
+      featureType: "poi",
+      elementType: "labels",
+      // Cast to any so TS doesn't complain about 'visibility'
+      stylers: [{ visibility: "off" } as any],
+    });
+  }
+
+  return nightStyles;
+}
+
 interface GoogleMapProps {
   onMapLoad?: () => void;
   onMapError?: (error: string) => void;
   showLandmarks?: boolean;
+  // PLANMalaysia layers
+  showPlanMalaysia?: boolean;
+  showAsetMPSepang?: boolean;
   showBlokPerancangan?: boolean;
   showBridge?: boolean;
   showCCTV?: boolean;
@@ -52,6 +182,7 @@ interface GoogleMapProps {
   showWartaKawasanLapang?: boolean;
   showZonAhliMajlis?: boolean;
   apiUrl?: string;
+  mapTheme?: "light" | "dark";
 }
 
 interface BlokPerancangan {
@@ -470,6 +601,8 @@ export default function GoogleMap({
   onMapLoad, 
   onMapError, 
   showLandmarks = false,
+  showPlanMalaysia = false,
+  showAsetMPSepang = false,
   showBlokPerancangan = false,
   showBridge = false,
   showCCTV = false,
@@ -509,7 +642,8 @@ export default function GoogleMap({
   showTrafficLight = false,
   showWartaKawasanLapang = false,
   showZonAhliMajlis = false,
-  apiUrl = 'http://localhost:3001/api/blok_perancangan'
+  apiUrl = 'http://localhost:3001/api/blok_perancangan',
+  mapTheme = "light",
 }: GoogleMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -618,11 +752,28 @@ export default function GoogleMap({
   const [trafficLightData, setTrafficLightData] = useState<TrafficLight[]>([]);
   const [wartaKawasanLapangData, setWartaKawasanLapangData] = useState<WartaKawasanLapang[]>([]);
   const [zonAhliMajlisData, setZonAhliMajlisData] = useState<ZonAhliMajlis[]>([]);
+  const [planMalaysiaFeatures, setPlanMalaysiaFeatures] = useState<any[]>([]);
+  const [asetMPSepangFeatures, setAsetMPSepangFeatures] = useState<any[]>([]);
   const initAttemptedRef = useRef(false);
   const landmarksEnabledRef = useRef(showLandmarks);
 
   // Use local db-data JSON instead of real SIGIS (localhost:3001). Set to false to reconnect to SIGIS.
   const USE_LOCAL_DB_DATA = true;
+
+  // Update map style when theme or landmark visibility changes
+  useEffect(() => {
+    if (!mapInstanceRef.current || !window.google?.maps) return;
+    const baseStyles = getBaseStyles(landmarksEnabledRef.current);
+    const styles =
+      mapTheme === "dark"
+        ? getDarkStyles(landmarksEnabledRef.current)
+        : baseStyles;
+    mapInstanceRef.current.setOptions({ styles });
+  }, [mapTheme, showLandmarks]);
+
+  // PLANMalaysia feature sets (DBIKMS2025 & AsetMPSepang)
+  const planMalaysiaDataLayerRef = useRef<any>(null);
+  const asetMPSepangDataLayerRef = useRef<any>(null);
   const getLayerDataUrl = (layerKey: string) => `/api/db-data/${layerKey}`;
 
   // Helper function to get color for each blok
@@ -1488,6 +1639,135 @@ export default function GoogleMap({
     } catch (err) {
       console.error('Error loading location_map_aset data:', err);
       // Don't set error state, just log it - map should still work
+    }
+  };
+
+  // PLANMalaysia: generic helper to convert ArcGIS FeatureSet to GeoJSON FeatureCollection
+  const arcgisFeatureSetToGeoJSON = (featureSet: any, idField: string) => {
+    if (!featureSet || !Array.isArray(featureSet.features)) {
+      return { type: "FeatureCollection", features: [] as any[] };
+    }
+
+    const features = featureSet.features
+      .map((f: any) => {
+        const attrs = f.attributes || {};
+        const geom = f.geometry;
+
+        if (!geom) return null;
+
+        // Polygon / multipolygon (rings)
+        if (Array.isArray(geom.rings)) {
+          const coordinates = geom.rings.map((ring: number[][]) =>
+            ring.map(([x, y]) => [x, y])
+          );
+
+          return {
+            type: "Feature",
+            geometry: {
+              type: "Polygon",
+              coordinates,
+            },
+            properties: {
+              ...attrs,
+              __source: "PLANMalaysia",
+              __idField: idField,
+            },
+          };
+        }
+
+        // Point geometry
+        if (typeof geom.x === "number" && typeof geom.y === "number") {
+          return {
+            type: "Feature",
+            geometry: {
+              type: "Point",
+              coordinates: [geom.x, geom.y],
+            },
+            properties: {
+              ...attrs,
+              __source: "PLANMalaysia",
+              __idField: idField,
+            },
+          };
+        }
+
+        return null;
+      })
+      .filter(Boolean);
+
+    return { type: "FeatureCollection", features };
+  };
+
+  const loadPlanMalaysiaData = async (map: any, dataLayer: any) => {
+    try {
+      console.log("Fetching PLANMalaysia DBIKMS2025 data from /api/plan-malaysia…");
+      const response = await fetch("/api/plan-malaysia?where=1=1&outFields=*&returnGeometry=true&resultRecordCount=5000");
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const featureSet = await response.json();
+      setPlanMalaysiaFeatures(featureSet.features || []);
+
+      // Clear previous PLANMalaysia features on this data layer
+      dataLayer.forEach((feature: any) => {
+        const props = feature.getProperty && feature.getProperty("__source");
+        if (props === "PLANMalaysia") dataLayer.remove(feature);
+      });
+
+      const fc = arcgisFeatureSetToGeoJSON(featureSet, featureSet.objectIdFieldName || "fid");
+      if ((fc.features as any[]).length === 0) {
+        console.warn("PLANMalaysia DBIKMS2025 returned no features");
+        return;
+      }
+
+      const added = dataLayer.addGeoJson(fc);
+      console.log(`Added ${added?.length || 0} PLANMalaysia DBIKMS2025 features to map`);
+
+      dataLayer.setStyle({
+        fillColor: "#0ea5e9",
+        fillOpacity: 0.15,
+        strokeColor: "#38bdf8",
+        strokeWeight: 2,
+        strokeOpacity: 0.9,
+      });
+    } catch (err) {
+      console.error("Error loading PLANMalaysia DBIKMS2025 data:", err);
+    }
+  };
+
+  const loadAsetMPSepangData = async (map: any, dataLayer: any) => {
+    try {
+      console.log("Fetching PLANMalaysia AsetMPSepang data from /api/plan-malaysia/asetmpsepang…");
+      const response = await fetch("/api/plan-malaysia/asetmpsepang?where=1=1&outFields=*&returnGeometry=true&resultRecordCount=5000");
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const featureSet = await response.json();
+      setAsetMPSepangFeatures(featureSet.features || []);
+
+      dataLayer.forEach((feature: any) => {
+        const props = feature.getProperty && feature.getProperty("__source");
+        if (props === "PLANMalaysia") dataLayer.remove(feature);
+      });
+
+      const fc = arcgisFeatureSetToGeoJSON(featureSet, featureSet.objectIdFieldName || "fid");
+      if ((fc.features as any[]).length === 0) {
+        console.warn("PLANMalaysia AsetMPSepang returned no features");
+        return;
+      }
+
+      const added = dataLayer.addGeoJson(fc);
+      console.log(`Added ${added?.length || 0} PLANMalaysia AsetMPSepang features to map`);
+
+      dataLayer.setStyle({
+        fillColor: "#10b981",
+        fillOpacity: 0.15,
+        strokeColor: "#22c55e",
+        strokeWeight: 2,
+        strokeOpacity: 0.9,
+      });
+    } catch (err) {
+      console.error("Error loading PLANMalaysia AsetMPSepang data:", err);
     }
   };
 
@@ -2547,11 +2827,15 @@ export default function GoogleMap({
                     strokeOpacity: 0.8,
                   };
                 }
-                return null;
               } catch (err) {
                 console.error('Error styling flexible_post feature:', err);
-                return null;
               }
+              // Fallback style so Google Maps always receives a style object
+              return {
+                strokeColor: '#f97316',
+                strokeWeight: 1,
+                strokeOpacity: 0.3,
+              };
             });
             
             // Add click event listener for flexible_post info window
@@ -2684,23 +2968,27 @@ export default function GoogleMap({
           console.log(`Added ${addedFeatures?.length || 0} gtmix features to map`);
           
           if (addedFeatures && addedFeatures.length > 0) {
-            // Style gtmix polygons (MULTIPOLYGON) - use a distinct color
+            // Style gtmix polygons (MULTIPOLYGON) - use an ultra-bright cyan so it stands out
             dataLayer.setStyle((feature: any) => {
               try {
                 const props = feature.getProperty?.('properties') || feature.toGeoJson?.()?.properties || {};
                 if (props.type === 'gtmix') {
                   return {
-                    fillColor: '#ef4444', // red-500 - bright red
-                    fillOpacity: 0.6, // increased opacity for better visibility
-                    strokeColor: '#dc2626', // red-600 - darker red for stroke
-                    strokeWeight: 3, // thicker stroke for better visibility
-                    strokeOpacity: 1.0, // fully opaque stroke
+                    // Very bright cyan fill
+                    fillColor: '#22d3ee', // cyan-400
+                    fillOpacity: 0.95,
+                    // White stroke to separate from other layers
+                    strokeColor: '#ffffff',
+                    strokeWeight: 2.5,
+                    strokeOpacity: 1.0,
                   };
                 }
-                return null;
+                // Safe fallback – Google Maps Data.setStyle must never receive null
+                return {};
               } catch (err) {
                 console.error('Error styling gtmix feature:', err);
-                return null;
+                // Safe fallback – Google Maps Data.setStyle must never receive null
+                return {};
               }
             });
             
@@ -2916,10 +3204,12 @@ export default function GoogleMap({
                     strokeOpacity: 1.0,
                   };
                 }
-                return null;
+                // Safe fallback – Google Maps Data.setStyle must never receive null
+                return {};
               } catch (err) {
                 console.error('Error styling sempadan_taman feature:', err);
-                return null;
+                // Safe fallback – Google Maps Data.setStyle must never receive null
+                return {};
               }
             });
             
@@ -3096,10 +3386,12 @@ export default function GoogleMap({
                     strokeOpacity: 1.0,
                   };
                 }
-                return null;
+                // Safe fallback – Google Maps Data.setStyle must never receive null
+                return {};
               } catch (err) {
                 console.error('Error styling gtnh_semasa feature:', err);
-                return null;
+                // Safe fallback – Google Maps Data.setStyle must never receive null
+                return {};
               }
             });
             
@@ -3339,22 +3631,26 @@ export default function GoogleMap({
           console.log(`Added ${addedFeatures?.length || 0} jalan features to map`);
           
           if (addedFeatures && addedFeatures.length > 0) {
-            // Style jalan lines (MULTILINESTRING) - use a distinct color
+            // Style jalan lines (MULTILINESTRING) - use a distinct orange color
             dataLayer.setStyle((feature: any) => {
               try {
                 const props = feature.getProperty?.('properties') || feature.toGeoJson?.()?.properties || {};
                 if (props.type === 'jalan') {
                   return {
-                    strokeColor: '#6366f1', // indigo-500
+                    strokeColor: '#f97316', // orange-500
                     strokeWeight: 4,
-                    strokeOpacity: 0.8,
+                    strokeOpacity: 0.9,
                   };
                 }
-                return null;
               } catch (err) {
                 console.error('Error styling jalan feature:', err);
-                return null;
               }
+              // Fallback style so Google Maps always gets a style object
+              return {
+                strokeColor: '#f97316',
+                strokeWeight: 2,
+                strokeOpacity: 0.5,
+              };
             });
             
             // Add click event listener for jalan info window
@@ -3579,10 +3875,12 @@ export default function GoogleMap({
                     strokeOpacity: 0.8,
                   };
                 }
-                return null;
+                // Safe fallback – Google Maps Data.setStyle must never receive null
+                return {};
               } catch (err) {
                 console.error('Error styling jalan_kejuruteraan feature:', err);
-                return null;
+                // Safe fallback – Google Maps Data.setStyle must never receive null
+                return {};
               }
             });
             
@@ -3795,23 +4093,27 @@ export default function GoogleMap({
           console.log(`Added ${addedFeatures?.length || 0} komited_km features to map`);
           
           if (addedFeatures && addedFeatures.length > 0) {
-            // Style komited_km polygons (MULTIPOLYGON) - use a distinct color
+            // Style komited_km polygons (MULTIPOLYGON) - use a bright green color
             dataLayer.setStyle((feature: any) => {
               try {
                 const props = feature.getProperty?.('properties') || feature.toGeoJson?.()?.properties || {};
                 if (props.type === 'komited_km') {
                   return {
-                    fillColor: '#f59e0b', // amber-500
-                    fillOpacity: 0.6,
-                    strokeColor: '#d97706', // amber-600
-                    strokeWeight: 3,
+                    // Very bright lime green fill so it stands out on dark map
+                    fillColor: '#a3e635', // lime-400
+                    fillOpacity: 0.95,
+                    // Light green stroke for clear boundary
+                    strokeColor: '#bbf7d0', // green-100
+                    strokeWeight: 2,
                     strokeOpacity: 1.0,
                   };
                 }
-                return null;
+                // Safe fallback – Google Maps Data.setStyle must never receive null
+                return {};
               } catch (err) {
                 console.error('Error styling komited_km feature:', err);
-                return null;
+                // Safe fallback – Google Maps Data.setStyle must never receive null
+                return {};
               }
             });
             
@@ -4057,10 +4359,12 @@ export default function GoogleMap({
                     strokeOpacity: 1.0,
                   };
                 }
-                return null;
+                // Safe fallback – Google Maps Data.setStyle must never receive null
+                return {};
               } catch (err) {
                 console.error('Error styling ndcdb20 feature:', err);
-                return null;
+                // Safe fallback – Google Maps Data.setStyle must never receive null
+                return {};
               }
             });
             
@@ -4306,10 +4610,12 @@ export default function GoogleMap({
                     strokeOpacity: 1.0,
                   };
                 }
-                return null;
+                // Safe fallback – Google Maps Data.setStyle must never receive null
+                return {};
               } catch (err) {
                 console.error('Error styling ndcdb23 feature:', err);
-                return null;
+                // Safe fallback – Google Maps Data.setStyle must never receive null
+                return {};
               }
             });
             
@@ -4561,10 +4867,12 @@ export default function GoogleMap({
                     strokeOpacity: 1.0,
                   };
                 }
-                return null;
+                // Safe fallback – Google Maps Data.setStyle must never receive null
+                return {};
               } catch (err) {
                 console.error(`Error styling ${typeName} feature:`, err);
-                return null;
+                // Safe fallback – Google Maps Data.setStyle must never receive null
+                return {};
               }
             });
             
@@ -4862,10 +5170,12 @@ export default function GoogleMap({
                     strokeOpacity: 0.9,
                   };
                 }
-                return null;
+                // Safe fallback – Google Maps Data.setStyle must never receive null
+                return {};
               } catch (err) {
                 console.error('Error styling road_marking_linear feature:', err);
-                return null;
+                // Safe fallback – Google Maps Data.setStyle must never receive null
+                return {};
               }
             });
             
@@ -5086,10 +5396,12 @@ export default function GoogleMap({
                     strokeOpacity: 0.9,
                   };
                 }
-                return null;
+                // Safe fallback – Google Maps Data.setStyle must never receive null
+                return {};
               } catch (err) {
                 console.error('Error styling road_median feature:', err);
-                return null;
+                // Safe fallback – Google Maps Data.setStyle must never receive null
+                return {};
               }
             });
             
@@ -5310,10 +5622,12 @@ export default function GoogleMap({
                     strokeOpacity: 0.9,
                   };
                 }
-                return null;
+                // Safe fallback – Google Maps Data.setStyle must never receive null
+                return {};
               } catch (err) {
                 console.error('Error styling road_shoulder feature:', err);
-                return null;
+                // Safe fallback – Google Maps Data.setStyle must never receive null
+                return {};
               }
             });
             
@@ -5409,9 +5723,13 @@ export default function GoogleMap({
         }
 
         if (sempadanDaerah.geom) {
-          let geometry = sempadanDaerah.geom;
-          if (typeof geometry === 'string') geometry = JSON.parse(geometry);
-          allFeatures.push({ type: 'Feature', geometry: geometry, properties: { type: 'sempadan_daerah', gid: sempadanDaerah.gid, id: sempadanDaerah.id, index: index, latitude: sempadanDaerah.latitude, longitude: sempadanDaerah.longitude, ...Object.keys(sempadanDaerah).reduce((acc: any, key: string) => { if (!['gid', 'id', 'latitude', 'longitude', 'geom', 'geom_geojson'].includes(key)) { acc[key] = sempadanDaerah[key]; } return acc; }, {}), } });
+          try {
+            let geometry = sempadanDaerah.geom;
+            if (typeof geometry === 'string') geometry = JSON.parse(geometry);
+            allFeatures.push({ type: 'Feature', geometry: geometry, properties: { type: 'sempadan_daerah', gid: sempadanDaerah.gid, id: sempadanDaerah.id, index: index, latitude: sempadanDaerah.latitude, longitude: sempadanDaerah.longitude, ...Object.keys(sempadanDaerah).reduce((acc: any, key: string) => { if (!['gid', 'id', 'latitude', 'longitude', 'geom', 'geom_geojson'].includes(key)) { acc[key] = sempadanDaerah[key]; } return acc; }, {}), } });
+          } catch (e) {
+            console.warn(`Failed to parse geom for sempadan_daerah ${sempadanDaerah.gid}:`, e);
+          }
         }
       });
 
@@ -5421,8 +5739,23 @@ export default function GoogleMap({
         if (addedFeatures && addedFeatures.length > 0) {
           dataLayer.setStyle((feature: any) => {
             const props = feature.getProperty?.('properties') || feature.toGeoJson?.()?.properties || {};
-            if (props.type === 'sempadan_daerah') { return { fillColor: '#3b82f6', fillOpacity: 0.3, strokeColor: '#60a5fa', strokeWeight: 2, strokeOpacity: 0.9, }; }
-            return null;
+            if (props.type === 'sempadan_daerah') {
+              return {
+                fillColor: '#3b82f6',
+                fillOpacity: 0.3,
+                strokeColor: '#60a5fa',
+                strokeWeight: 2,
+                strokeOpacity: 0.9,
+              };
+            }
+            // Default style as safe fallback
+            return {
+              fillColor: '#3b82f6',
+              fillOpacity: 0.05,
+              strokeColor: '#60a5fa',
+              strokeWeight: 1,
+              strokeOpacity: 0.3,
+            };
           });
           dataLayer.addListener('click', (event: any) => {
             const feature = event.feature;
@@ -6136,9 +6469,13 @@ export default function GoogleMap({
         }
 
         if (tamanPerumahan.geom) {
-          let geometry = tamanPerumahan.geom;
-          if (typeof geometry === 'string') geometry = JSON.parse(geometry);
-          allFeatures.push({ type: 'Feature', geometry: geometry, properties: { type: 'taman_perumahan', gid: tamanPerumahan.gid, id: tamanPerumahan.id, index: index, latitude: tamanPerumahan.latitude, longitude: tamanPerumahan.longitude, ...Object.keys(tamanPerumahan).reduce((acc: any, key: string) => { if (!['gid', 'id', 'latitude', 'longitude', 'geom', 'geom_geojson'].includes(key)) { acc[key] = tamanPerumahan[key]; } return acc; }, {}), } });
+          try {
+            let geometry = tamanPerumahan.geom;
+            if (typeof geometry === 'string') geometry = JSON.parse(geometry);
+            allFeatures.push({ type: 'Feature', geometry: geometry, properties: { type: 'taman_perumahan', gid: tamanPerumahan.gid, id: tamanPerumahan.id, index: index, latitude: tamanPerumahan.latitude, longitude: tamanPerumahan.longitude, ...Object.keys(tamanPerumahan).reduce((acc: any, key: string) => { if (!['gid', 'id', 'latitude', 'longitude', 'geom', 'geom_geojson'].includes(key)) { acc[key] = tamanPerumahan[key]; } return acc; }, {}), } });
+          } catch (e) {
+            console.warn(`Failed to parse geom for taman_perumahan ${tamanPerumahan.gid}:`, e);
+          }
         }
       });
 
@@ -6148,8 +6485,23 @@ export default function GoogleMap({
         if (addedFeatures && addedFeatures.length > 0) {
           dataLayer.setStyle((feature: any) => {
             const props = feature.getProperty?.('properties') || feature.toGeoJson?.()?.properties || {};
-            if (props.type === 'taman_perumahan') { return { fillColor: '#10b981', fillOpacity: 0.3, strokeColor: '#059669', strokeWeight: 2, strokeOpacity: 0.8, }; }
-            return null;
+            if (props.type === 'taman_perumahan') {
+              return {
+                fillColor: '#10b981',
+                fillOpacity: 0.3,
+                strokeColor: '#059669',
+                strokeWeight: 2,
+                strokeOpacity: 0.8,
+              };
+            }
+            // Default style as safe fallback
+            return {
+              fillColor: '#10b981',
+              fillOpacity: 0.1,
+              strokeColor: '#059669',
+              strokeWeight: 1,
+              strokeOpacity: 0.4,
+            };
           });
           dataLayer.addListener('click', (event: any) => {
             const feature = event.feature;
@@ -6342,9 +6694,13 @@ export default function GoogleMap({
         }
 
         if (wartaKawasanLapang.geom) {
-          let geometry = wartaKawasanLapang.geom;
-          if (typeof geometry === 'string') geometry = JSON.parse(geometry);
-          allFeatures.push({ type: 'Feature', geometry: geometry, properties: { type: 'warta_kawasan_lapang', gid: wartaKawasanLapang.gid, id: wartaKawasanLapang.id, index: index, latitude: wartaKawasanLapang.latitude, longitude: wartaKawasanLapang.longitude, ...Object.keys(wartaKawasanLapang).reduce((acc: any, key: string) => { if (!['gid', 'id', 'latitude', 'longitude', 'geom', 'geom_geojson'].includes(key)) { acc[key] = wartaKawasanLapang[key]; } return acc; }, {}), } });
+          try {
+            let geometry = wartaKawasanLapang.geom;
+            if (typeof geometry === 'string') geometry = JSON.parse(geometry);
+            allFeatures.push({ type: 'Feature', geometry: geometry, properties: { type: 'warta_kawasan_lapang', gid: wartaKawasanLapang.gid, id: wartaKawasanLapang.id, index: index, latitude: wartaKawasanLapang.latitude, longitude: wartaKawasanLapang.longitude, ...Object.keys(wartaKawasanLapang).reduce((acc: any, key: string) => { if (!['gid', 'id', 'latitude', 'longitude', 'geom', 'geom_geojson'].includes(key)) { acc[key] = wartaKawasanLapang[key]; } return acc; }, {}), } });
+          } catch (e) {
+            console.warn(`Failed to parse geom for warta_kawasan_lapang ${wartaKawasanLapang.gid}:`, e);
+          }
         }
       });
 
@@ -6355,7 +6711,8 @@ export default function GoogleMap({
           dataLayer.setStyle((feature: any) => {
             const props = feature.getProperty?.('properties') || feature.toGeoJson?.()?.properties || {};
             if (props.type === 'warta_kawasan_lapang') { return { fillColor: '#84cc16', fillOpacity: 0.3, strokeColor: '#65a30d', strokeWeight: 2, strokeOpacity: 0.8, }; }
-            return null;
+            // Safe fallback – Google Maps Data.setStyle must never receive null
+            return {};
           });
           dataLayer.addListener('click', (event: any) => {
             const feature = event.feature;
@@ -6430,35 +6787,78 @@ export default function GoogleMap({
         }
 
         if (zonAhliMajlis.geom) {
-          let geometry = zonAhliMajlis.geom;
-          if (typeof geometry === 'string') geometry = JSON.parse(geometry);
-          allFeatures.push({ type: 'Feature', geometry: geometry, properties: { type: 'zon_ahli_majlis', gid: zonAhliMajlis.gid, id: zonAhliMajlis.id, index: index, latitude: zonAhliMajlis.latitude, longitude: zonAhliMajlis.longitude, ...Object.keys(zonAhliMajlis).reduce((acc: any, key: string) => { if (!['gid', 'id', 'latitude', 'longitude', 'geom', 'geom_geojson'].includes(key)) { acc[key] = zonAhliMajlis[key]; } return acc; }, {}), } });
+          try {
+            // geom is already a GeoJSON object from the API (converted from WKT EPSG:3857 → lon/lat)
+            const geometry = typeof zonAhliMajlis.geom === 'string'
+              ? JSON.parse(zonAhliMajlis.geom)
+              : zonAhliMajlis.geom;
+            if (!geometry || !geometry.type || !geometry.coordinates) {
+              console.warn(`Skipping zon_ahli_majlis ${zonAhliMajlis.gid}: invalid geometry`);
+            } else {
+              allFeatures.push({
+                type: 'Feature',
+                geometry,
+                properties: {
+                  gid: zonAhliMajlis.gid,
+                  id: zonAhliMajlis.id,
+                  ...Object.keys(zonAhliMajlis).reduce((acc: any, key: string) => {
+                    if (!['gid', 'id', 'latitude', 'longitude', 'geom', 'geom_geojson'].includes(key)) {
+                      acc[key] = zonAhliMajlis[key];
+                    }
+                    return acc;
+                  }, {}),
+                },
+              });
+            }
+          } catch (e) {
+            console.warn(`Failed to parse geom for zon_ahli_majlis ${zonAhliMajlis.gid}:`, e);
+          }
         }
       });
 
       if (allFeatures.length > 0) {
         const featureCollection = { type: 'FeatureCollection', features: allFeatures };
-        const addedFeatures = dataLayer.addGeoJson(featureCollection);
-        if (addedFeatures && addedFeatures.length > 0) {
-          dataLayer.setStyle((feature: any) => {
-            const props = feature.getProperty?.('properties') || feature.toGeoJson?.()?.properties || {};
-            if (props.type === 'zon_ahli_majlis') { return { fillColor: '#8b5cf6', fillOpacity: 0.3, strokeColor: '#7c3aed', strokeWeight: 2, strokeOpacity: 0.8, }; }
-            return null;
+        try {
+          // Apply a static style BEFORE addGeoJson so Maps API never calls the
+          // style callback with null-typed results (which causes "b is not a function").
+          dataLayer.setStyle({
+            fillColor: '#8b5cf6',
+            fillOpacity: 0.3,
+            strokeColor: '#7c3aed',
+            strokeWeight: 2,
+            strokeOpacity: 0.8,
           });
+
+          const addedFeatures = dataLayer.addGeoJson(featureCollection);
+          console.log(`Added ${addedFeatures?.length || 0} zon_ahli_majlis polygon features`);
+
           dataLayer.addListener('click', (event: any) => {
-            const feature = event.feature;
-            const props = feature.getProperty?.('properties') || feature.toGeoJson?.()?.properties || {};
-            if (props.type === 'zon_ahli_majlis') {
-              const zonAhliMajlis = zonAhliMajlises.find((z: ZonAhliMajlis) => z.gid === props.gid);
-              if (zonAhliMajlis) {
+            try {
+              const feature = event.feature;
+              // Properties are flattened onto the feature — access directly
+              const gid = feature.getProperty('gid');
+              const record = zonAhliMajlises.find((z: ZonAhliMajlis) => z.gid === gid);
+              if (record) {
                 const infoWindow = new window.google.maps.InfoWindow({
-                  content: `<div style="padding: 8px; min-width: 200px;"><h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: bold;">Zon Ahli Majlis ${zonAhliMajlis.gid}</h3>${zonAhliMajlis.id ? `<p style="margin: 4px 0; font-size: 14px;"><strong>ID:</strong> ${zonAhliMajlis.id}</p>` : ''}${Object.keys(zonAhliMajlis).filter(key => !['gid', 'id', 'latitude', 'longitude', 'geom', 'geom_geojson'].includes(key) && zonAhliMajlis[key] !== null && zonAhliMajlis[key] !== undefined).slice(0, 5).map(key => `<p style="margin: 4px 0; font-size: 12px;"><strong>${key}:</strong> ${zonAhliMajlis[key]}</p>`).join('')}${zonAhliMajlis.latitude && zonAhliMajlis.longitude ? `<p style="margin: 4px 0; font-size: 12px; color: #666;"><strong>Center:</strong> ${zonAhliMajlis.latitude.toFixed(6)}, ${zonAhliMajlis.longitude.toFixed(6)}</p>` : ''}</div>`,
+                  content: `<div style="padding:8px;min-width:200px;">
+                    <h3 style="margin:0 0 8px 0;font-size:16px;font-weight:bold;">Zon Ahli Majlis ${record.gid}</h3>
+                    ${record.id ? `<p style="margin:4px 0;font-size:14px;"><strong>ID:</strong> ${record.id}</p>` : ''}
+                    ${Object.keys(record)
+                      .filter(k => !['gid', 'id', 'latitude', 'longitude', 'geom', 'geom_geojson'].includes(k) && record[k] != null)
+                      .slice(0, 5)
+                      .map(k => `<p style="margin:4px 0;font-size:12px;"><strong>${k}:</strong> ${record[k]}</p>`)
+                      .join('')}
+                  </div>`,
                 });
                 infoWindow.setPosition(event.latLng);
                 infoWindow.open(map);
               }
+            } catch (clickErr) {
+              console.warn('zon_ahli_majlis click handler error:', clickErr);
             }
           });
+        } catch (geoErr) {
+          console.error('addGeoJson failed for zon_ahli_majlis:', geoErr);
         }
       }
       console.log(`Created ${markersCreated} zon_ahli_majlis markers out of ${zonAhliMajlises.length} records`);
@@ -7037,71 +7437,52 @@ export default function GoogleMap({
         const center = { lat: 2.7608, lng: 101.7380 };
 
         console.log('Initializing Google Map...');
+        const baseStyles = getBaseStyles(landmarksEnabledRef.current);
+        const styles =
+          mapTheme === "dark"
+            ? getDarkStyles(landmarksEnabledRef.current)
+            : baseStyles;
+
         const map = new window.google.maps.Map(mapRef.current, {
           center,
           zoom: 15,
-          mapTypeId: 'hybrid',
+          // Use roadmap so custom light/dark styles are fully applied
+          mapTypeId: 'roadmap',
           mapTypeControl: true,
           streetViewControl: true,
           fullscreenControl: true,
           zoomControl: true,
           disableDefaultUI: false,
-          // Control landmarks visibility
-          styles: landmarksEnabledRef.current ? [] : [
-            {
-              featureType: 'poi',
-              elementType: 'labels',
-              stylers: [{ visibility: 'off' }]
-            },
-            {
-              featureType: 'poi.business',
-              stylers: [{ visibility: 'off' }]
-            },
-            {
-              featureType: 'poi.attraction',
-              stylers: [{ visibility: 'off' }]
-            },
-            {
-              featureType: 'poi.place_of_worship',
-              stylers: [{ visibility: 'off' }]
-            },
-            {
-              featureType: 'poi.school',
-              stylers: [{ visibility: 'off' }]
-            },
-            {
-              featureType: 'poi.sports_complex',
-              stylers: [{ visibility: 'off' }]
-            }
-          ],
-        });
-
-        // Zone markers
-        const zones = [
-          { name: 'Zone A - Main Facility', lat: 2.7618, lng: 101.7370, status: 'secure' },
-          { name: 'Zone B - Data Center', lat: 2.7608, lng: 101.7390, status: 'secure' },
-          { name: 'Zone C - Perimeter', lat: 2.7598, lng: 101.7380, status: 'alert' },
-          { name: 'Zone D - Parking Area', lat: 2.7608, lng: 101.7360, status: 'secure' },
-        ];
-
-        zones.forEach((zone) => {
-          new window.google.maps.Marker({
-            position: { lat: zone.lat, lng: zone.lng },
-            map,
-            title: zone.name,
-            icon: {
-              path: window.google.maps.SymbolPath.CIRCLE,
-              scale: 8,
-              fillColor: zone.status === 'secure' ? '#10b981' : '#f59e0b',
-              fillOpacity: 0.7,
-              strokeColor: '#FFFFFF',
-              strokeWeight: 2,
-            },
-          });
+          styles,
         });
 
         mapInstanceRef.current = map;
-        
+
+        // Restore last saved view (center + zoom) if available
+        try {
+          if (typeof window !== "undefined") {
+            const raw = window.localStorage.getItem("iocMapView");
+            if (raw) {
+              const parsed = JSON.parse(raw) as {
+                lat: number;
+                lng: number;
+                zoom: number;
+              };
+              if (
+                parsed &&
+                typeof parsed.lat === "number" &&
+                typeof parsed.lng === "number" &&
+                typeof parsed.zoom === "number"
+              ) {
+                map.setCenter({ lat: parsed.lat, lng: parsed.lng });
+                map.setZoom(parsed.zoom);
+              }
+            }
+          }
+        } catch {
+          // ignore persistence errors
+        }
+
         // Initialize Data Layer for GeoJSON
         const dataLayer = new window.google.maps.Data({ map });
         dataLayerRef.current = dataLayer;
@@ -7165,6 +7546,10 @@ export default function GoogleMap({
         // Initialize separate data layer for ndcdb23
         const ndcdb23DataLayer = new window.google.maps.Data({ map });
         ndcdb23DataLayerRef.current = ndcdb23DataLayer;
+
+        // PLANMalaysia data layers
+        planMalaysiaDataLayerRef.current = new window.google.maps.Data({ map });
+        asetMPSepangDataLayerRef.current = new window.google.maps.Data({ map });
         
         // Initialize separate data layers for pasar types
         const pasarAwamDataLayer = new window.google.maps.Data({ map });
@@ -8559,6 +8944,65 @@ export default function GoogleMap({
       }
     }
   }, [showZonAhliMajlis, zonAhliMajlisData]);
+
+  // Toggle PLANMalaysia DBIKMS2025 polygons
+  useEffect(() => {
+    if (mapInstanceRef.current && window.google?.maps && planMalaysiaDataLayerRef.current) {
+      if (showPlanMalaysia) {
+        if (planMalaysiaFeatures.length === 0) {
+          loadPlanMalaysiaData(mapInstanceRef.current, planMalaysiaDataLayerRef.current);
+        } else {
+          planMalaysiaDataLayerRef.current.setMap(mapInstanceRef.current);
+        }
+      } else {
+        planMalaysiaDataLayerRef.current.setMap(null);
+      }
+    }
+  }, [showPlanMalaysia, planMalaysiaFeatures]);
+
+  // Toggle PLANMalaysia AsetMPSepang polygons
+  useEffect(() => {
+    if (mapInstanceRef.current && window.google?.maps && asetMPSepangDataLayerRef.current) {
+      if (showAsetMPSepang) {
+        if (asetMPSepangFeatures.length === 0) {
+          loadAsetMPSepangData(mapInstanceRef.current, asetMPSepangDataLayerRef.current);
+        } else {
+          asetMPSepangDataLayerRef.current.setMap(mapInstanceRef.current);
+        }
+      } else {
+        asetMPSepangDataLayerRef.current.setMap(null);
+      }
+    }
+  }, [showAsetMPSepang, asetMPSepangFeatures]);
+
+  // Persist current map view (center + zoom) so the IOC dashboard
+  // re-opens with the same zoom level the user last used.
+  useEffect(() => {
+    if (!mapInstanceRef.current || typeof window === "undefined") return;
+
+    const map = mapInstanceRef.current;
+    const listener = map.addListener("idle", () => {
+      try {
+        const center = map.getCenter();
+        const zoom = map.getZoom();
+        if (!center || typeof zoom !== "number") return;
+        const payload = {
+          lat: center.lat(),
+          lng: center.lng(),
+          zoom,
+        };
+        window.localStorage.setItem("iocMapView", JSON.stringify(payload));
+      } catch {
+        // ignore persistence errors
+      }
+    });
+
+    return () => {
+      if (listener && typeof listener.remove === "function") {
+        listener.remove();
+      }
+    };
+  }, []);
 
   if (error) {
     return (

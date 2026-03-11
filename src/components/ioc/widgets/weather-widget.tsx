@@ -2,6 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 
+declare global {
+  interface Window {
+    __weatherwidget_init?: () => void;
+  }
+}
+
 interface WeatherWidgetProps {
   onVisibilityChange?: (visible: boolean) => void;
   defaultVisible?: boolean;
@@ -103,10 +109,22 @@ export default function WeatherWidget({
       return;
     }
 
-    // Check if widget already exists
+    // If an anchor already exists, try (re)initializing the script to render/update it
     const existingAnchor = widgetContainerRef.current.querySelector('a.weatherwidget-io');
     if (existingAnchor) {
-      setIsLoading(false);
+      loadWeatherScript()
+        .then(() => {
+          if (window.__weatherwidget_init) {
+            window.__weatherwidget_init();
+          }
+          setIsLoading(false);
+          setError(null);
+        })
+        .catch((err: any) => {
+          console.error('Error re-initializing weather widget:', err);
+          setError('Failed to load weather widget');
+          setIsLoading(false);
+        });
       return;
     }
 
@@ -149,14 +167,23 @@ export default function WeatherWidget({
   }, []);
 
   return (
-    <div className="w-full h-full min-h-0 flex flex-col">
-      <div 
+    <div className="w-full h-full min-h-0 flex flex-col rounded-xl bg-white/5 border border-white/10 shadow-xl overflow-hidden">
+      {/* Drag handle for GridStack */}
+      <div
+        data-drag-handle
+        className="flex items-center justify-between px-3 py-2 text-[11px] sm:text-xs text-white/70 bg-black/30 border-b border-white/10 select-none cursor-grab"
+      >
+        <span className="font-medium text-white/80 truncate">Sepang Weather</span>
+        <span className="text-[10px] text-white/50 hidden sm:inline">Powered by weatherwidget.io</span>
+      </div>
+      <div
         ref={widgetContainerRef}
         className="w-full flex-1 min-h-0 relative"
-        style={{ 
-          minHeight: 120,
-          display: 'block',
-          overflow: 'hidden'
+        style={{
+          minHeight: 0,
+          height: "100%",
+          display: "block",
+          overflow: "hidden",
         }}
       >
         {isLoading && !error && (

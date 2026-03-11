@@ -89,24 +89,6 @@ export default function AIBoxDetection({
   const [position, setPosition] = useState(initialPosition || { x: 900, y: 200 });
   const [size, setSize] = useState(initialSize);
   const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    if (disableInternalPositioning && initialSize && (initialSize.width !== size.width || initialSize.height !== size.height)) {
-      setSize(initialSize);
-    }
-  }, [disableInternalPositioning, initialSize?.width, initialSize?.height]);
-
-  // Set initial position on client side only to avoid hydration mismatch
-  useEffect(() => {
-    setIsMounted(true);
-    if (!initialPosition && typeof window !== 'undefined') {
-      setPosition({ x: window.innerWidth - 400, y: 200 });
-    }
-  }, [initialPosition]);
-  const [isDragging, setIsDragging] = useState(false);
-  const [isResizing, setIsResizing] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const cardRef = useRef<HTMLDivElement>(null);
   const [aiboxes] = useState<AIBox[]>(mockAIBoxes);
 
@@ -136,66 +118,18 @@ export default function AIBoxDetection({
   const latestImage = latestActiveBox?.latestImage;
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (disableInternalPositioning) return; // Disable when wrapped
-    
-    // Only allow dragging from the header
+    if (disableInternalPositioning) return;
     if (e.target instanceof HTMLElement && !e.target.closest('[data-drag-handle]')) {
       return;
     }
-    
     if (!cardRef.current) return;
-    
     e.preventDefault();
     const rect = cardRef.current.getBoundingClientRect();
-    setDragOffset({
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
+    setPosition({
+      x: rect.left,
+      y: rect.top,
     });
-    setIsDragging(true);
   };
-
-  useEffect(() => {
-    if (disableInternalPositioning) return; // Disable internal drag/resize when wrapped
-    
-    const handleMouseMove = (e: MouseEvent) => {
-      if (isResizing) {
-        const deltaX = e.clientX - resizeStart.x;
-        const deltaY = e.clientY - resizeStart.y;
-        
-        const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, resizeStart.width + deltaX));
-        const newHeight = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, resizeStart.height + deltaY));
-        
-        setSize({ width: newWidth, height: newHeight });
-      } else if (isDragging) {
-        const newX = e.clientX - dragOffset.x;
-        const newY = e.clientY - dragOffset.y;
-
-        // Constrain to viewport
-        const maxX = window.innerWidth - size.width;
-        const maxY = window.innerHeight - size.height;
-
-        setPosition({
-          x: Math.max(0, Math.min(newX, maxX)),
-          y: Math.max(0, Math.min(newY, maxY)),
-        });
-      }
-    };
-
-    const handleMouseUp = () => {
-      setIsDragging(false);
-      setIsResizing(false);
-    };
-
-    if (isDragging || isResizing) {
-      document.addEventListener("mousemove", handleMouseMove);
-      document.addEventListener("mouseup", handleMouseUp);
-    }
-
-    return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, [isDragging, isResizing, dragOffset, resizeStart, size, disableInternalPositioning]);
 
   const getStatusIcon = (status: AIBox["status"]) => {
     switch (status) {

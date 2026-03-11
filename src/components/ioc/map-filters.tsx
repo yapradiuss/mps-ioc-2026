@@ -1,15 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Image from "next/image";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { 
-  Filter,
+import {
+  Search,
   MapPin,
   Layers,
   Camera,
@@ -18,11 +13,10 @@ import {
   ShoppingBag,
   TreePine,
   Landmark,
+  X,
 } from "lucide-react";
 
 interface MapFiltersProps {
-  onLandmarksChange?: (enabled: boolean) => void;
-  landmarksEnabled?: boolean;
   onBlokPerancanganChange?: (enabled: boolean) => void;
   blokPerancanganEnabled?: boolean;
   onBridgeChange?: (enabled: boolean) => void;
@@ -101,6 +95,11 @@ interface MapFiltersProps {
   wartaKawasanLapangEnabled?: boolean;
   onZonAhliMajlisChange?: (enabled: boolean) => void;
   zonAhliMajlisEnabled?: boolean;
+  // PLANMalaysia (ArcGIS) layer group
+  onPlanMalaysiaChange?: (enabled: boolean) => void;
+  planMalaysiaEnabled?: boolean;
+  onAsetMPSepangChange?: (enabled: boolean) => void;
+  asetMPSepangEnabled?: boolean;
 }
 
 interface FilterItem {
@@ -109,205 +108,293 @@ interface FilterItem {
   icon?: string | React.ReactNode;
   enabled: boolean;
   onChange?: (enabled: boolean) => void;
-  color?: string;
+  accent: string;
+}
+
+type CategoryKey =
+  | "infrastructure"
+  | "facilities"
+  | "boundaries"
+  | "markets"
+  | "assets"
+  | "planMalaysia"
+  | "others";
+
+const CATEGORY_META: Record<
+  CategoryKey,
+  { label: string; icon: React.ReactNode; accent: string }
+> = {
+  infrastructure: { label: "Infrastructure", icon: <Building2 className="h-4 w-4" />, accent: "from-blue-500 to-cyan-500" },
+  facilities:     { label: "Facilities",     icon: <Camera className="h-4 w-4" />,    accent: "from-purple-500 to-pink-500" },
+  boundaries:     { label: "Boundaries",     icon: <Map className="h-4 w-4" />,        accent: "from-emerald-500 to-teal-500" },
+  markets:        { label: "Markets",        icon: <ShoppingBag className="h-4 w-4" />, accent: "from-orange-500 to-amber-500" },
+  assets:         { label: "Assets",         icon: <TreePine className="h-4 w-4" />,   accent: "from-lime-500 to-green-500" },
+  planMalaysia:   { label: "PLAN Malaysia",  icon: <Landmark className="h-4 w-4" />,   accent: "from-sky-500 to-blue-500" },
+  others:         { label: "Others",         icon: <Landmark className="h-4 w-4" />,   accent: "from-rose-500 to-red-500" },
+};
+
+function LayerToggle({
+  item,
+  accent,
+}: {
+  item: FilterItem;
+  accent: string;
+}) {
+  return (
+    <button
+      onClick={() => item.onChange?.(!item.enabled)}
+      className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-left
+        ${item.enabled
+          ? "bg-white/10 shadow-sm"
+          : "hover:bg-white/5"
+        }`}
+    >
+      {/* Icon badge */}
+      <div
+        className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200
+          ${item.enabled
+            ? `bg-gradient-to-br ${accent} shadow-md`
+            : "bg-white/10"
+          }`}
+      >
+        {item.icon ? (
+          typeof item.icon === "string" ? (
+            <Image
+              src={item.icon}
+              alt={item.label}
+              width={16}
+              height={16}
+              className="h-4 w-4 object-contain"
+            />
+          ) : (
+            <span className={`${item.enabled ? "text-white" : "text-white/50"}`}>
+              {item.icon}
+            </span>
+          )
+        ) : (
+          <Layers className={`h-3.5 w-3.5 ${item.enabled ? "text-white" : "text-white/40"}`} />
+        )}
+      </div>
+
+      {/* Label */}
+      <span
+        className={`flex-1 text-[11px] leading-snug font-medium transition-colors duration-200 pr-2
+          ${item.enabled ? "text-white" : "text-white/50 group-hover:text-white/70"}`}
+        style={{ wordBreak: "break-word" }}
+      >
+        {item.label}
+      </span>
+
+      {/* Toggle pill */}
+      <div
+        className={`relative w-9 h-5 rounded-full shrink-0 transition-all duration-300
+          ${item.enabled
+            ? `bg-gradient-to-r ${accent}`
+            : "bg-white/15"
+          }`}
+      >
+        <div
+          className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all duration-300
+            ${item.enabled ? "left-[18px]" : "left-0.5"}`}
+        />
+      </div>
+    </button>
+  );
 }
 
 export default function MapFilters(props: MapFiltersProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("infrastructure");
+  const [activeTab, setActiveTab] = useState<CategoryKey>("infrastructure");
+  const [search, setSearch] = useState("");
 
-  // Define filter items organized by category - using props directly
-  const filterCategories = {
+  const filterCategories: Record<CategoryKey, FilterItem[]> = useMemo(
+    () => ({
     infrastructure: [
-      { id: "bridge", label: "Bridge", icon: "/icon/bridge.png", enabled: props.bridgeEnabled ?? false, onChange: props.onBridgeChange, color: "bg-amber-500" },
-      { id: "drainage", label: "Drainage", icon: "/icon/drainage.png", enabled: props.drainageEnabled ?? false, onChange: props.onDrainageChange, color: "bg-blue-500" },
-      { id: "earthWork", label: "Earth Work", icon: "/icon/earthwork.png", enabled: props.earthWorkEnabled ?? false, onChange: props.onEarthWorkChange, color: "bg-orange-500" },
-      { id: "constructedSlope", label: "Constructed Slope", icon: "/icon/constructionslope.png", enabled: props.constructedSlopeEnabled ?? false, onChange: props.onConstructedSlopeChange, color: "bg-green-500" },
-      { id: "jalan", label: "Jalan", enabled: props.jalanEnabled ?? false, onChange: props.onJalanChange, color: "bg-indigo-500" },
-      { id: "jalanKejuruteraan", label: "Jalan Kejuruteraan", enabled: props.jalanKejuruteraanEnabled ?? false, onChange: props.onJalanKejuruteraanChange, color: "bg-pink-500" },
-      { id: "roadHump", label: "Road Hump", icon: "/icon/roadhump.png", enabled: props.roadHumpEnabled ?? false, onChange: props.onRoadHumpChange, color: "bg-yellow-500" },
-      { id: "roadMarkingLinear", label: "Road Marking Linear", icon: "/icon/road-marking.png", enabled: props.roadMarkingLinearEnabled ?? false, onChange: props.onRoadMarkingLinearChange, color: "bg-orange-500" },
-      { id: "roadMarkingPoint", label: "Road Marking Point", icon: "/icon/road-marking-point.png", enabled: props.roadMarkingPointEnabled ?? false, onChange: props.onRoadMarkingPointChange, color: "bg-orange-500" },
-      { id: "roadMedian", label: "Road Median", icon: "/icon/roadmedian.webp", enabled: props.roadMedianEnabled ?? false, onChange: props.onRoadMedianChange, color: "bg-teal-500" },
-      { id: "roadShoulder", label: "Road Shoulder", icon: "/icon/roadshoulder.png", enabled: props.roadShoulderEnabled ?? false, onChange: props.onRoadShoulderChange, color: "bg-slate-500" },
-      { id: "feederPillar", label: "Feeder Pillar", icon: "/icon/feeder-pillar.jpg", enabled: props.feederPillarEnabled ?? false, onChange: props.onFeederPillarChange, color: "bg-yellow-500" },
-      { id: "flexiblePost", label: "Flexible Post", icon: "/icon/flexiblepost.png", enabled: props.flexiblePostEnabled ?? false, onChange: props.onFlexiblePostChange, color: "bg-orange-500" },
-      { id: "signboard", label: "Signboard", icon: "/icon/signboard.png", enabled: props.signboardEnabled ?? false, onChange: props.onSignboardChange, color: "bg-purple-600" },
+      { id: "bridge",             label: "Bridge",               icon: "/icon/bridge.png",             enabled: props.bridgeEnabled ?? false,             onChange: props.onBridgeChange,             accent: "from-amber-500 to-yellow-400" },
+      { id: "drainage",           label: "Drainage",             icon: "/icon/drainage.png",           enabled: props.drainageEnabled ?? false,           onChange: props.onDrainageChange,           accent: "from-blue-500 to-cyan-400" },
+      { id: "earthWork",          label: "Earth Work",           icon: "/icon/earthwork.png",          enabled: props.earthWorkEnabled ?? false,          onChange: props.onEarthWorkChange,          accent: "from-orange-500 to-amber-400" },
+      { id: "constructedSlope",   label: "Constructed Slope",    icon: "/icon/constructionslope.png",  enabled: props.constructedSlopeEnabled ?? false,   onChange: props.onConstructedSlopeChange,   accent: "from-green-500 to-emerald-400" },
+      { id: "jalan",              label: "Jalan",                icon: undefined,                      enabled: props.jalanEnabled ?? false,              onChange: props.onJalanChange,              accent: "from-indigo-500 to-blue-400" },
+      { id: "jalanKejuruteraan",  label: "Jalan Kejuruteraan",   icon: undefined,                      enabled: props.jalanKejuruteraanEnabled ?? false,  onChange: props.onJalanKejuruteraanChange,  accent: "from-pink-500 to-rose-400" },
+      { id: "roadHump",           label: "Road Hump",            icon: "/icon/roadhump.png",           enabled: props.roadHumpEnabled ?? false,           onChange: props.onRoadHumpChange,           accent: "from-yellow-500 to-amber-400" },
+      { id: "roadMarkingLinear",  label: "Road Marking Linear",  icon: "/icon/road-marking.png",       enabled: props.roadMarkingLinearEnabled ?? false,  onChange: props.onRoadMarkingLinearChange,  accent: "from-orange-500 to-red-400" },
+      { id: "roadMarkingPoint",   label: "Road Marking Point",   icon: "/icon/road-marking-point.png", enabled: props.roadMarkingPointEnabled ?? false,   onChange: props.onRoadMarkingPointChange,   accent: "from-orange-400 to-yellow-400" },
+      { id: "roadMedian",         label: "Road Median",          icon: "/icon/roadmedian.webp",        enabled: props.roadMedianEnabled ?? false,         onChange: props.onRoadMedianChange,         accent: "from-teal-500 to-cyan-400" },
+      { id: "roadShoulder",       label: "Road Shoulder",        icon: "/icon/roadshoulder.png",       enabled: props.roadShoulderEnabled ?? false,       onChange: props.onRoadShoulderChange,       accent: "from-slate-400 to-gray-400" },
+      { id: "feederPillar",       label: "Feeder Pillar",        icon: "/icon/feeder-pillar.jpg",      enabled: props.feederPillarEnabled ?? false,       onChange: props.onFeederPillarChange,       accent: "from-yellow-400 to-orange-400" },
+      { id: "flexiblePost",       label: "Flexible Post",        icon: "/icon/flexiblepost.png",       enabled: props.flexiblePostEnabled ?? false,       onChange: props.onFlexiblePostChange,       accent: "from-orange-400 to-amber-400" },
+      { id: "signboard",          label: "Signboard",            icon: "/icon/signboard.png",          enabled: props.signboardEnabled ?? false,          onChange: props.onSignboardChange,          accent: "from-purple-500 to-violet-400" },
     ],
     facilities: [
-      { id: "cctv", label: "CCTV", icon: <Camera className="h-4 w-4" />, enabled: props.cctvEnabled ?? false, onChange: props.onCCTVChange, color: "bg-purple-500" },
-      { id: "trafficLight", label: "Traffic Light", icon: "/icon/traffic-light.png", enabled: props.trafficLightEnabled ?? false, onChange: props.onTrafficLightChange, color: "bg-red-600" },
-      { id: "streetLighting", label: "Street Lighting", icon: "/icon/street-light-mps.png", enabled: props.streetLightingEnabled ?? false, onChange: props.onStreetLightingChange, color: "bg-yellow-500" },
-      { id: "loranetStreetlight", label: "Loranet Streetlight", icon: "/icon/loranetstreetlight.png", enabled: props.loranetStreetlightEnabled ?? false, onChange: props.onLoranetStreetlightChange, color: "bg-yellow-500" },
-      { id: "sportFacility", label: "Sport Facility", icon: "/icon/sport.png", enabled: props.sportFacilityEnabled ?? false, onChange: props.onSportFacilityChange, color: "bg-orange-600" },
+      { id: "cctv",              label: "CCTV",              icon: <Camera className="h-4 w-4" />,  enabled: props.cctvEnabled ?? false,              onChange: props.onCCTVChange,              accent: "from-purple-500 to-pink-400" },
+      { id: "trafficLight",      label: "Traffic Light",     icon: "/icon/traffic-light.png",        enabled: props.trafficLightEnabled ?? false,      onChange: props.onTrafficLightChange,      accent: "from-red-500 to-rose-400" },
+      { id: "streetLighting",    label: "Street Lighting",   icon: "/icon/street-light-mps.png",     enabled: props.streetLightingEnabled ?? false,    onChange: props.onStreetLightingChange,    accent: "from-yellow-400 to-amber-300" },
+      { id: "loranetStreetlight",label: "Loranet Streetlight",icon: "/icon/loranetstreetlight.png",  enabled: props.loranetStreetlightEnabled ?? false,onChange: props.onLoranetStreetlightChange,accent: "from-yellow-500 to-orange-400" },
+      { id: "sportFacility",     label: "Sport Facility",    icon: "/icon/sport.png",                enabled: props.sportFacilityEnabled ?? false,     onChange: props.onSportFacilityChange,     accent: "from-orange-500 to-red-400" },
     ],
     boundaries: [
-      { id: "blokPerancangan", label: "Blok Perancangan", icon: <Layers className="h-4 w-4" />, enabled: props.blokPerancanganEnabled ?? false, onChange: props.onBlokPerancanganChange, color: "bg-blue-500" },
-      { id: "sempadanTaman", label: "Sempadan Taman", icon: "/icon/tamanborder.png", enabled: props.sempadanTamanEnabled ?? false, onChange: props.onSempadanTamanChange, color: "bg-green-500" },
-      { id: "sempadanDaerah", label: "Sempadan Daerah", icon: "/icon/daerah.png", enabled: props.sempadanDaerahEnabled ?? false, onChange: props.onSempadanDaerahChange, color: "bg-blue-600" },
-      { id: "tamanPerumahan", label: "Taman Perumahan", icon: "/icon/tamanperumahan.png", enabled: props.tamanPerumahanEnabled ?? false, onChange: props.onTamanPerumahanChange, color: "bg-green-600" },
-      { id: "zonAhliMajlis", label: "Zon Ahli Majlis", icon: "/icon/zoning.png", enabled: props.zonAhliMajlisEnabled ?? false, onChange: props.onZonAhliMajlisChange, color: "bg-purple-600" },
+      { id: "blokPerancangan",  label: "Blok Perancangan",  icon: <Layers className="h-4 w-4" />,  enabled: props.blokPerancanganEnabled ?? false,  onChange: props.onBlokPerancanganChange,  accent: "from-blue-500 to-indigo-400" },
+      { id: "sempadanTaman",    label: "Sempadan Taman",    icon: "/icon/tamanborder.png",          enabled: props.sempadanTamanEnabled ?? false,    onChange: props.onSempadanTamanChange,    accent: "from-green-500 to-emerald-400" },
+      { id: "sempadanDaerah",   label: "Sempadan Daerah",   icon: "/icon/daerah.png",               enabled: props.sempadanDaerahEnabled ?? false,   onChange: props.onSempadanDaerahChange,   accent: "from-blue-600 to-blue-400" },
+      { id: "tamanPerumahan",   label: "Taman Perumahan",   icon: "/icon/tamanperumahan.png",       enabled: props.tamanPerumahanEnabled ?? false,   onChange: props.onTamanPerumahanChange,   accent: "from-green-600 to-teal-400" },
+      { id: "zonAhliMajlis",    label: "Zon Ahli Majlis",   icon: "/icon/zoning.png",              enabled: props.zonAhliMajlisEnabled ?? false,    onChange: props.onZonAhliMajlisChange,    accent: "from-purple-600 to-violet-400" },
     ],
     markets: [
-      { id: "pasarAwam", label: "Pasar Awam", icon: "/icon/pasar.png", enabled: props.pasarAwamEnabled ?? false, onChange: props.onPasarAwamChange, color: "bg-violet-500" },
-      { id: "pasarMalam", label: "Pasar Malam", icon: "/icon/pasar.png", enabled: props.pasarMalamEnabled ?? false, onChange: props.onPasarMalamChange, color: "bg-violet-500" },
-      { id: "pasarSari", label: "Pasar Sari", icon: "/icon/pasar.png", enabled: props.pasarSariEnabled ?? false, onChange: props.onPasarSariChange, color: "bg-violet-500" },
-      { id: "pasarTani", label: "Pasar Tani", icon: "/icon/pasar.png", enabled: props.pasarTaniEnabled ?? false, onChange: props.onPasarTaniChange, color: "bg-violet-500" },
+      { id: "pasarAwam",  label: "Pasar Awam",  icon: "/icon/pasar.png", enabled: props.pasarAwamEnabled ?? false,  onChange: props.onPasarAwamChange,  accent: "from-violet-500 to-purple-400" },
+      { id: "pasarMalam", label: "Pasar Malam", icon: "/icon/pasar.png", enabled: props.pasarMalamEnabled ?? false, onChange: props.onPasarMalamChange, accent: "from-violet-600 to-indigo-400" },
+      { id: "pasarSari",  label: "Pasar Sari",  icon: "/icon/pasar.png", enabled: props.pasarSariEnabled ?? false,  onChange: props.onPasarSariChange,  accent: "from-violet-400 to-pink-400" },
+      { id: "pasarTani",  label: "Pasar Tani",  icon: "/icon/pasar.png", enabled: props.pasarTaniEnabled ?? false,  onChange: props.onPasarTaniChange,  accent: "from-orange-500 to-amber-400" },
     ],
     assets: [
-      { id: "locationMapAset", label: "Location Map Aset", icon: "/icon/tree.png", enabled: props.locationMapAsetEnabled ?? false, onChange: props.onLocationMapAsetChange, color: "bg-green-500" },
-      { id: "locationMapAsetItem", label: "Location Map Aset Item", icon: "/icon/tree.png", enabled: props.locationMapAsetItemEnabled ?? false, onChange: props.onLocationMapAsetItemChange, color: "bg-green-500" },
-      { id: "chartingKm", label: "Charting KM", icon: "/icon/chartingkm.png", enabled: props.chartingKmEnabled ?? false, onChange: props.onChartingKmChange, color: "bg-indigo-500" },
-      { id: "komitedKm", label: "Komited KM", enabled: props.komitedKmEnabled ?? false, onChange: props.onKomitedKmChange, color: "bg-amber-500" },
-      { id: "gtmix", label: "GTMix", enabled: props.gtmixEnabled ?? false, onChange: props.onGtmixChange, color: "bg-red-500" },
-      { id: "gtnhSemasa", label: "GTNH Semasa", enabled: props.gtnhSemasaEnabled ?? false, onChange: props.onGtnhSemasaChange, color: "bg-blue-500" },
-      { id: "ndcdb20", label: "NDCDB20", icon: "/icon/ndcdb20.png", enabled: props.ndcdb20Enabled ?? false, onChange: props.onNdcdb20Change, color: "bg-cyan-500" },
-      { id: "ndcdb23", label: "NDCDB23", icon: "/icon/ndcdb23.png", enabled: props.ndcdb23Enabled ?? false, onChange: props.onNdcdb23Change, color: "bg-cyan-600" },
-      { id: "wartaKawasanLapang", label: "Warta Kawasan Lapang", icon: "/icon/land.png", enabled: props.wartaKawasanLapangEnabled ?? false, onChange: props.onWartaKawasanLapangChange, color: "bg-lime-600" },
+      { id: "locationMapAset",     label: "Location Map Aset",      icon: "/icon/tree.png",         enabled: props.locationMapAsetEnabled ?? false,     onChange: props.onLocationMapAsetChange,     accent: "from-green-500 to-lime-400" },
+      { id: "locationMapAsetItem", label: "Location Map Aset Item",  icon: "/icon/tree.png",         enabled: props.locationMapAsetItemEnabled ?? false, onChange: props.onLocationMapAsetItemChange, accent: "from-green-400 to-emerald-400" },
+      { id: "chartingKm",          label: "Charting KM",             icon: "/icon/chartingkm.png",   enabled: props.chartingKmEnabled ?? false,          onChange: props.onChartingKmChange,          accent: "from-indigo-500 to-blue-400" },
+      { id: "komitedKm",           label: "Komited KM",              icon: undefined,                enabled: props.komitedKmEnabled ?? false,           onChange: props.onKomitedKmChange,           accent: "from-amber-500 to-yellow-400" },
+      { id: "gtmix",               label: "GTMix",                   icon: undefined,                enabled: props.gtmixEnabled ?? false,               onChange: props.onGtmixChange,               accent: "from-red-500 to-rose-400" },
+      { id: "gtnhSemasa",          label: "GTNH Semasa",             icon: undefined,                enabled: props.gtnhSemasaEnabled ?? false,          onChange: props.onGtnhSemasaChange,          accent: "from-blue-500 to-cyan-400" },
+      { id: "ndcdb20",             label: "NDCDB20",                 icon: "/icon/ndcdb20.png",      enabled: props.ndcdb20Enabled ?? false,             onChange: props.onNdcdb20Change,             accent: "from-cyan-500 to-teal-400" },
+      { id: "ndcdb23",             label: "NDCDB23",                 icon: "/icon/ndcdb23.png",      enabled: props.ndcdb23Enabled ?? false,             onChange: props.onNdcdb23Change,             accent: "from-cyan-600 to-blue-400" },
+      { id: "wartaKawasanLapang",  label: "Warta Kawasan Lapang",    icon: "/icon/land.png",         enabled: props.wartaKawasanLapangEnabled ?? false,  onChange: props.onWartaKawasanLapangChange,  accent: "from-lime-500 to-green-400" },
+    ],
+    // New PLAN Malaysia category – toggles remote ArcGIS DBIKMS2025 layer(s)
+    planMalaysia: [
+      {
+        id: "planMalaysia",
+        label: "DBIKMS 2025 (PLANMalaysia)",
+        icon: "/icon/plan-malaysia.png",
+        enabled: props.planMalaysiaEnabled ?? false,
+        onChange: props.onPlanMalaysiaChange,
+        accent: "from-sky-500 to-blue-500",
+      },
+      {
+        id: "asetMPSepang",
+        label: "Aset MPSepang (PLANMalaysia)",
+        icon: "/icon/plan-malaysia.png",
+        enabled: props.asetMPSepangEnabled ?? false,
+        onChange: props.onAsetMPSepangChange,
+        accent: "from-emerald-500 to-teal-500",
+      },
     ],
     others: [
-      { id: "landmarks", label: "Landmarks", icon: <MapPin className="h-4 w-4" />, enabled: props.landmarksEnabled ?? false, onChange: props.onLandmarksChange, color: "bg-green-500" },
-      { id: "lokasiBanjir", label: "Lokasi Banjir", icon: "/icon/flood.png", enabled: props.lokasiBanjirEnabled ?? false, onChange: props.onLokasiBanjirChange, color: "bg-blue-500" },
-      { id: "sampahHaram", label: "Sampah Haram", icon: "/icon/illegaldumping.jpeg", enabled: props.sampahHaramEnabled ?? false, onChange: props.onSampahHaramChange, color: "bg-red-600" },
+      { id: "lokasiBanjir",label: "Lokasi Banjir", icon: "/icon/flood.png",              enabled: props.lokasiBanjirEnabled ?? false, onChange: props.onLokasiBanjirChange, accent: "from-blue-500 to-cyan-400" },
+      { id: "sampahHaram", label: "Sampah Haram",  icon: "/icon/illegaldumping.jpeg",    enabled: props.sampahHaramEnabled ?? false,  onChange: props.onSampahHaramChange,  accent: "from-red-500 to-rose-400" },
     ],
-  };
+  }),
+  [props]
+);
 
-  // Flatten all filters for count
-  const allFilters = Object.values(filterCategories).flat();
+  const totalActive = useMemo(
+    () => Object.values(filterCategories).flat().filter((f) => f.enabled).length,
+    [filterCategories]
+  );
 
-  // Count active filters
-  const activeFilterCount = allFilters.filter(f => f.enabled).length;
+  const activeCounts = useMemo(
+    () =>
+      Object.fromEntries(
+        (Object.keys(filterCategories) as CategoryKey[]).map((k) => [
+          k,
+          filterCategories[k].filter((f) => f.enabled).length,
+        ])
+      ) as Record<CategoryKey, number>,
+    [filterCategories]
+  );
 
-  // Render filter item
-  const renderFilterItem = (item: FilterItem) => {
-    const handleToggle = () => {
-      if (item.onChange) {
-        item.onChange(!item.enabled);
-      }
-    };
+  const visibleItems = useMemo(() => {
+    const items = filterCategories[activeTab];
+    if (!search.trim()) return items;
+    const q = search.toLowerCase();
+    return items.filter((i) => i.label.toLowerCase().includes(q));
+  }, [filterCategories, activeTab, search]);
 
-    return (
-      <div
-        key={item.id}
-        className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted/50 transition-colors cursor-pointer group"
-        onClick={handleToggle}
-      >
-        <Checkbox
-          checked={item.enabled}
-          onCheckedChange={(checked) => {
-            if (item.onChange) {
-              item.onChange(checked === true);
-            }
-          }}
-          onClick={(e) => e.stopPropagation()}
-          className="shrink-0"
-        />
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          {item.icon && (
-            <div className="shrink-0">
-              {typeof item.icon === 'string' ? (
-                <Image src={item.icon} alt={item.label} width={16} height={16} className="h-4 w-4 object-contain" />
-              ) : (
-                <div className="h-4 w-4 flex items-center justify-center text-muted-foreground">
-                  {item.icon}
-                </div>
-              )}
-            </div>
-          )}
-          <span className="text-sm font-medium text-foreground truncate">{item.label}</span>
-        </div>
-        {item.enabled && item.color && (
-          <div className={`h-2 w-2 rounded-full ${item.color} shrink-0`} />
-        )}
-      </div>
-    );
-  };
+  const categoryKeys = Object.keys(CATEGORY_META) as CategoryKey[];
 
   return (
-    <div className="fixed top-20 left-4 z-[90]">
-      <Sheet open={isOpen} onOpenChange={setIsOpen}>
-        <SheetTrigger asChild>
-          <Button
-            variant="default"
-            size="lg"
-            className="bg-background/90 backdrop-blur-md border border-white/20 shadow-lg hover:bg-background/95 text-foreground"
-          >
-            <Filter className="h-4 w-4 mr-2" />
-            <span className="font-medium">Map Filters</span>
-            {activeFilterCount > 0 && (
-              <Badge variant="secondary" className="ml-2 bg-primary text-primary-foreground">
-                {activeFilterCount}
-              </Badge>
-            )}
-          </Button>
-        </SheetTrigger>
-        <SheetContent side="left" className="w-full sm:max-w-md p-0 flex flex-col bg-background/50 backdrop-blur-xl border-r border-white/20 shadow-2xl">
-          <SheetHeader className="px-6 pt-6 pb-4 border-b">
-            <div className="flex items-center justify-between">
-              <SheetTitle className="text-xl font-semibold">Map Filters</SheetTitle>
-              {activeFilterCount > 0 && (
-                <Badge variant="secondary" className="bg-primary text-primary-foreground">
-                  {activeFilterCount} active
-                </Badge>
-              )}
-            </div>
-          </SheetHeader>
+    <div className="w-full h-full flex flex-col gap-0 min-h-0">
+      {/* Search bar */}
+      <div className="px-3 pt-2 pb-3 flex-shrink-0">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-white/40 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search layers…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-white/8 border border-white/10 rounded-lg pl-8 pr-8 py-2 text-xs text-white placeholder:text-white/30 outline-none focus:border-sky-400/50 focus:bg-white/12 transition-all"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70 transition-colors"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </div>
 
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
-            <div className="px-6 pt-4 border-b">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="infrastructure" className="text-xs">
-                  <Building2 className="h-3 w-3 mr-1" />
-                  Infrastructure
-                </TabsTrigger>
-                <TabsTrigger value="facilities" className="text-xs">
-                  <Camera className="h-3 w-3 mr-1" />
-                  Facilities
-                </TabsTrigger>
-                <TabsTrigger value="boundaries" className="text-xs">
-                  <Map className="h-3 w-3 mr-1" />
-                  Boundaries
-                </TabsTrigger>
-              </TabsList>
-              <TabsList className="grid w-full grid-cols-3 mt-2">
-                <TabsTrigger value="markets" className="text-xs">
-                  <ShoppingBag className="h-3 w-3 mr-1" />
-                  Markets
-                </TabsTrigger>
-                <TabsTrigger value="assets" className="text-xs">
-                  <TreePine className="h-3 w-3 mr-1" />
-                  Assets
-                </TabsTrigger>
-                <TabsTrigger value="others" className="text-xs">
-                  <Landmark className="h-3 w-3 mr-1" />
-                  Others
-                </TabsTrigger>
-              </TabsList>
-            </div>
+        {/* Total active badge */}
+        {totalActive > 0 && (
+          <div className="mt-2 flex items-center gap-1.5">
+            <div className="h-1.5 w-1.5 rounded-full bg-sky-400 animate-pulse" />
+            <span className="text-[10px] text-sky-300 font-medium">
+              {totalActive} layer{totalActive !== 1 ? "s" : ""} active
+            </span>
+          </div>
+        )}
+      </div>
 
-            <ScrollArea className="flex-1 px-6 py-4">
-              <TabsContent value="infrastructure" className="mt-0 space-y-1">
-                {filterCategories.infrastructure.map(renderFilterItem)}
-              </TabsContent>
-              <TabsContent value="facilities" className="mt-0 space-y-1">
-                {filterCategories.facilities.map(renderFilterItem)}
-              </TabsContent>
-              <TabsContent value="boundaries" className="mt-0 space-y-1">
-                {filterCategories.boundaries.map(renderFilterItem)}
-              </TabsContent>
-              <TabsContent value="markets" className="mt-0 space-y-1">
-                {filterCategories.markets.map(renderFilterItem)}
-              </TabsContent>
-              <TabsContent value="assets" className="mt-0 space-y-1">
-                {filterCategories.assets.map(renderFilterItem)}
-              </TabsContent>
-              <TabsContent value="others" className="mt-0 space-y-1">
-                {filterCategories.others.map(renderFilterItem)}
-              </TabsContent>
-            </ScrollArea>
-          </Tabs>
-        </SheetContent>
-      </Sheet>
+      {/* Category pills — horizontal scroll */}
+      <div className="flex-shrink-0 overflow-x-auto scrollbar-none px-3 pb-3">
+        <div className="flex gap-1.5 w-max">
+          {categoryKeys.map((key) => {
+            const meta = CATEGORY_META[key];
+            const count = activeCounts[key];
+            const isActive = activeTab === key;
+            return (
+              <button
+                key={key}
+                onClick={() => { setActiveTab(key); setSearch(""); }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap transition-all duration-200 border
+                  ${isActive
+                    ? `bg-gradient-to-r ${meta.accent} text-white border-transparent shadow-md`
+                    : "bg-white/6 text-white/50 border-white/10 hover:bg-white/12 hover:text-white/80"
+                  }`}
+              >
+                <span className={isActive ? "text-white" : "text-white/50"}>{meta.icon}</span>
+                {meta.label}
+                {count > 0 && (
+                  <span
+                    className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold
+                      ${isActive ? "bg-white/25 text-white" : "bg-white/15 text-white/70"}`}
+                  >
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div className="mx-3 h-px bg-white/8 flex-shrink-0" />
+
+      {/* Layer list */}
+      <ScrollArea className="flex-1 min-h-0">
+        <div className="px-3 py-2 space-y-1">
+          {visibleItems.length === 0 ? (
+            <div className="py-8 text-center text-white/30 text-xs">
+              No layers found
+            </div>
+          ) : (
+            visibleItems.map((item) => (
+              <LayerToggle
+                key={item.id}
+                item={item}
+                accent={item.accent}
+              />
+            ))
+          )}
+        </div>
+      </ScrollArea>
     </div>
   );
 }

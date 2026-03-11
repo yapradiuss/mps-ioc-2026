@@ -11,6 +11,7 @@ import {
   Users,
   Menu,
   Radio,
+  Leaf,
   Camera,
   Map,
   FileText,
@@ -67,6 +68,12 @@ const sidebarItems = [
     href: "/admin/news-ticker",
     icon: Newspaper,
     pagePath: "/admin/news-ticker",
+  },
+  {
+    title: "Carbon Emission",
+    href: "/admin/carbon-emission",
+    icon: Leaf,
+    pagePath: "/admin/carbon-emission",
   },
 ];
 
@@ -181,7 +188,7 @@ export function Sidebar({ className }: SidebarProps) {
               />
             </div>
             <h2 className="mb-2 px-4 text-xl font-semibold tracking-tight text-center">
-              MPSepang Admin
+              Majlis Perbandaran Sepang IOC Dashboard
             </h2>
             <div className="space-y-1">
               {filteredItems.map((item) => {

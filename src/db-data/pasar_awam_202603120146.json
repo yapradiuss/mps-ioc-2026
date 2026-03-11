@@ -1,0 +1,15 @@
+{
+	"pasar_awam": [
+		{
+			"gid": 1,
+			"id": null,
+			"nama": "Pasar Awam Sg. Pelek",
+			"lokasi": "Sg. Pelek",
+			"bil_tapak": null,
+			"no_tapak": null,
+			"pemilik": null,
+			"operasi": "Setiap Hari",
+			"geom": "MULTIPOLYGON (((11322989.275180224 294380.24885555904, 11322981.762947397 294388.24381751876, 11322993.486316573 294397.681824486, 11323000.304545822 294389.06304159516, 11322989.275180224 294380.24885555904)))"
+		}
+	]
+}
