@@ -10,21 +10,39 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Lock, AlertCircle } from "lucide-react";
 import { logActivity } from "@/lib/audit-logger";
-import { isAuthenticated } from "@/lib/auth";
+import { isAuthenticated, getUserPages } from "@/lib/auth";
 import type { User } from "@/lib/auth";
 
 // Hardcoded login (no API). Change in production to use real auth.
-const HARDCODED_EMAIL = "superadmin@mpsepang.gov.my";
-const HARDCODED_PASSWORD = "123456";
-const HARDCODED_USER: User = {
-  id: 1,
-  username: "superadmin",
-  email: HARDCODED_EMAIL,
-  full_name: "Super Administrator",
-  role: "admin",
-  status: "active",
-  pages: ["/admin", "/admin/users", "/admin/audit-trail", "/admin/news-ticker", "/admin/live-cctv-feed"],
-};
+// Each entry: email (lowercase match), password, and user object to store in session.
+const HARDCODED_ACCOUNTS: { email: string; password: string; user: User }[] = [
+  {
+    email: "superadmin@mpsepang.gov.my",
+    password: "123456",
+    user: {
+      id: 1,
+      username: "superadmin",
+      email: "superadmin@mpsepang.gov.my",
+      full_name: "Super Administrator",
+      role: "admin",
+      status: "active",
+      pages: ["/admin", "/admin/users", "/admin/audit-trail", "/admin/news-ticker", "/admin/live-cctv-feed", "/admin/carbon-emission"],
+    },
+  },
+  {
+    email: "perancang@mpsepang.gov.my",
+    password: "123456",
+    user: {
+      id: 2,
+      username: "perancang",
+      email: "perancang@mpsepang.gov.my",
+      full_name: "Perancang",
+      role: "user",
+      status: "active",
+      pages: ["/admin/carbon-emission"],
+    },
+  },
+];
 
 function LoginForm() {
   const router = useRouter();
@@ -37,7 +55,17 @@ function LoginForm() {
   // Check authentication once on mount
   useEffect(() => {
     if (isAuthenticated()) {
-      const redirectTo = searchParams.get('redirect') || '/admin';
+      const requestedRedirect = searchParams.get('redirect');
+      const userPages = getUserPages();
+      const canAdmin = userPages.includes('/admin');
+      const redirectTo =
+        requestedRedirect && (canAdmin || userPages.includes(requestedRedirect))
+          ? requestedRedirect
+          : canAdmin
+            ? '/admin'
+            : userPages.length > 0
+              ? userPages[0]
+              : '/admin';
       router.replace(redirectTo);
     }
   }, [router, searchParams]);
@@ -50,8 +78,12 @@ function LoginForm() {
     setError(null);
 
     try {
-      // Hardcoded login (no API)
-      if (email.trim().toLowerCase() !== HARDCODED_EMAIL.toLowerCase() || password !== HARDCODED_PASSWORD) {
+      const emailNorm = email.trim().toLowerCase();
+      const account = HARDCODED_ACCOUNTS.find(
+        (a) => a.email.toLowerCase() === emailNorm && a.password === password
+      );
+
+      if (!account) {
         setError('Invalid email or password.');
         if (email) {
           logActivity({
@@ -66,7 +98,7 @@ function LoginForm() {
       }
 
       const token = 'authenticated';
-      localStorage.setItem('user', JSON.stringify(HARDCODED_USER));
+      localStorage.setItem('user', JSON.stringify(account.user));
       localStorage.setItem('token', token);
       document.cookie = `auth_token=${token}; path=/; max-age=${604800}; SameSite=Lax`;
 
@@ -76,11 +108,22 @@ function LoginForm() {
         action: 'LOGIN',
         category: 'SECURITY',
         resource: 'Authentication',
-        description: `User logged in: ${HARDCODED_USER.email}`,
+        description: `User logged in: ${account.user.email}`,
         status: 'SUCCESS',
       });
 
-      router.push(searchParams.get('redirect') || '/admin');
+      const requestedRedirect = searchParams.get('redirect');
+      const userPages = account.user.pages ?? [];
+      const canAdmin = userPages.includes('/admin');
+      const redirectTo =
+        requestedRedirect && (canAdmin || userPages.includes(requestedRedirect))
+          ? requestedRedirect
+          : canAdmin
+            ? '/admin'
+            : userPages.length > 0
+              ? userPages[0]
+              : '/admin';
+      router.push(redirectTo);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to login.');
     } finally {

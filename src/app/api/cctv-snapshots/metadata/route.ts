@@ -71,17 +71,18 @@ export async function GET() {
       console.error("Failed to read cctv-snapshots dir:", err);
     }
 
+    const now = Date.now();
     const devices: SnapshotDeviceMeta[] = Array.from(devicesMap.entries()).map(
-      ([deviceId, { timestamp, success }]) => ({
+      ([deviceId, { success }]) => ({
         deviceId,
-        timestamp,
+        timestamp: now,
         success,
         imageUrl: `/cctv-snapshots/${deviceId}.jpg`,
       })
     );
 
     const body: SnapshotMetadataResponse = {
-      lastUpdated: lastUpdated || Date.now(),
+      lastUpdated: now,
       devices,
     };
 

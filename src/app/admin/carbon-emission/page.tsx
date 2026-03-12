@@ -72,7 +72,11 @@ const EMISSION_FACTOR_G_PER_KM: Record<VehicleKind, number> = {
 interface SummaryRow {
   kind: VehicleKind;
   label: string;
+  arah1Daily: number;
+  arah2Daily: number;
   daily: number;
+  arah1Annual: number;
+  arah2Annual: number;
   annual: number;
 }
 
@@ -84,16 +88,28 @@ interface ChartPoint {
 interface DailyRow {
   date: string;
   motorCount: number;
+  motorArah1: number;
+  motorArah2: number;
   motor: number;
   carCount: number;
+  carArah1: number;
+  carArah2: number;
   car: number;
   mpvCount: number;
+  mpvArah1: number;
+  mpvArah2: number;
   mpv: number;
   busCount: number;
+  busArah1: number;
+  busArah2: number;
   bus: number;
   lightCount: number;
+  lightArah1: number;
+  lightArah2: number;
   light: number;
   heavyCount: number;
+  heavyArah1: number;
+  heavyArah2: number;
   heavy: number;
   total: number;
 }
@@ -159,7 +175,8 @@ export default function AdminCarbonEmissionPage() {
 
     return VEHICLE_META.map(({ kind, label }) => {
       const ef = EMISSION_FACTOR_G_PER_KM[kind];
-      let totalVol = 0;
+      let volArah1 = 0;
+      let volArah2 = 0;
 
       rows.forEach((row) => {
         if (labelToKind(row.__1) !== kind) return;
@@ -167,19 +184,27 @@ export default function AdminCarbonEmissionPage() {
           (sum, dk) => sum + (Number(row[dk] ?? 0) || 0),
           0
         );
-        totalVol += v;
+        if (row._dir === "Arah 1") volArah1 += v;
+        else if (row._dir === "Arah 2") volArah2 += v;
       });
 
-      // Average daily volume across both directions × 1 km × EF → tCO₂e/day
-      const avgDailyVol = totalVol / numDays;
-      const daily = (avgDailyVol * ef) / 1_000_000;
-      const annual = daily * 365;
+      const avgArah1 = volArah1 / numDays;
+      const avgArah2 = volArah2 / numDays;
+      const arah1Daily = (avgArah1 * ef) / 1_000_000;
+      const arah2Daily = (avgArah2 * ef) / 1_000_000;
+      const daily = arah1Daily + arah2Daily;
+      const arah1Annual = arah1Daily * 365;
+      const arah2Annual = arah2Daily * 365;
 
       return {
         kind,
         label,
+        arah1Daily: Number(arah1Daily.toFixed(2)),
+        arah2Daily: Number(arah2Daily.toFixed(2)),
         daily: Number(daily.toFixed(2)),
-        annual: Number(annual.toFixed(2)),
+        arah1Annual: Number(arah1Annual.toFixed(2)),
+        arah2Annual: Number(arah2Annual.toFixed(2)),
+        annual: Number((daily * 365).toFixed(2)),
       };
     });
   }, [rows, dateKeys, numDays]);
@@ -204,26 +229,36 @@ export default function AdminCarbonEmissionPage() {
   const currentSiteLabel =
     SITE_OPTIONS.find((s) => s.id === selectedSite)?.label ?? selectedSite;
 
-  const grandTotalAnnual = summaryRows.reduce((sum, r) => sum + r.annual, 0);
+  const grandTotalArah1Daily = summaryRows.reduce((sum, r) => sum + r.arah1Daily, 0);
+  const grandTotalArah2Daily = summaryRows.reduce((sum, r) => sum + r.arah2Daily, 0);
   const grandTotalDaily = summaryRows.reduce((sum, r) => sum + r.daily, 0);
+  const grandTotalArah1Annual = summaryRows.reduce((sum, r) => sum + r.arah1Annual, 0);
+  const grandTotalArah2Annual = summaryRows.reduce((sum, r) => sum + r.arah2Annual, 0);
+  const grandTotalAnnual = summaryRows.reduce((sum, r) => sum + r.annual, 0);
 
-  // Per-date daily emission table (all vehicles, both directions)
+  // Per-date daily emission table (all vehicles, Arah 1 & Arah 2)
   const dailyRows: DailyRow[] = useMemo(() => {
     if (!rows.length || !dateKeys.length) return [];
 
     return dateKeys.map((dk) => {
       let motorCount = 0;
-      let motor = 0;
+      let motorArah1 = 0;
+      let motorArah2 = 0;
       let carCount = 0;
-      let car = 0;
+      let carArah1 = 0;
+      let carArah2 = 0;
       let mpvCount = 0;
-      let mpv = 0;
+      let mpvArah1 = 0;
+      let mpvArah2 = 0;
       let busCount = 0;
-      let bus = 0;
+      let busArah1 = 0;
+      let busArah2 = 0;
       let lightCount = 0;
-      let light = 0;
+      let lightArah1 = 0;
+      let lightArah2 = 0;
       let heavyCount = 0;
-      let heavy = 0;
+      let heavyArah1 = 0;
+      let heavyArah2 = 0;
 
       rows.forEach((row) => {
         const kind = labelToKind(row.__1);
@@ -231,43 +266,68 @@ export default function AdminCarbonEmissionPage() {
         const vol = Number(row[dk] ?? 0) || 0;
         const ef = EMISSION_FACTOR_G_PER_KM[kind];
         const tPerDay = (vol * ef) / 1_000_000;
+        const isArah1 = row._dir === "Arah 1";
 
         if (kind === "motor") {
           motorCount += vol;
-          motor += tPerDay;
+          if (isArah1) motorArah1 += tPerDay;
+          else motorArah2 += tPerDay;
         } else if (kind === "car") {
           carCount += vol;
-          car += tPerDay;
+          if (isArah1) carArah1 += tPerDay;
+          else carArah2 += tPerDay;
         } else if (kind === "mpv") {
           mpvCount += vol;
-          mpv += tPerDay;
+          if (isArah1) mpvArah1 += tPerDay;
+          else mpvArah2 += tPerDay;
         } else if (kind === "bus") {
           busCount += vol;
-          bus += tPerDay;
+          if (isArah1) busArah1 += tPerDay;
+          else busArah2 += tPerDay;
         } else if (kind === "light") {
           lightCount += vol;
-          light += tPerDay;
+          if (isArah1) lightArah1 += tPerDay;
+          else lightArah2 += tPerDay;
         } else if (kind === "heavy") {
           heavyCount += vol;
-          heavy += tPerDay;
+          if (isArah1) heavyArah1 += tPerDay;
+          else heavyArah2 += tPerDay;
         }
       });
 
+      const motor = motorArah1 + motorArah2;
+      const car = carArah1 + carArah2;
+      const mpv = mpvArah1 + mpvArah2;
+      const bus = busArah1 + busArah2;
+      const light = lightArah1 + lightArah2;
+      const heavy = heavyArah1 + heavyArah2;
       const total = motor + car + mpv + bus + light + heavy;
 
       return {
         date: dk,
         motorCount,
+        motorArah1: Number(motorArah1.toFixed(3)),
+        motorArah2: Number(motorArah2.toFixed(3)),
         motor: Number(motor.toFixed(3)),
         carCount,
+        carArah1: Number(carArah1.toFixed(3)),
+        carArah2: Number(carArah2.toFixed(3)),
         car: Number(car.toFixed(3)),
         mpvCount,
+        mpvArah1: Number(mpvArah1.toFixed(3)),
+        mpvArah2: Number(mpvArah2.toFixed(3)),
         mpv: Number(mpv.toFixed(3)),
         busCount,
+        busArah1: Number(busArah1.toFixed(3)),
+        busArah2: Number(busArah2.toFixed(3)),
         bus: Number(bus.toFixed(3)),
         lightCount,
+        lightArah1: Number(lightArah1.toFixed(3)),
+        lightArah2: Number(lightArah2.toFixed(3)),
         light: Number(light.toFixed(3)),
         heavyCount,
+        heavyArah1: Number(heavyArah1.toFixed(3)),
+        heavyArah2: Number(heavyArah2.toFixed(3)),
         heavy: Number(heavy.toFixed(3)),
         total: Number(total.toFixed(3)),
       };
@@ -351,11 +411,23 @@ export default function AdminCarbonEmissionPage() {
                     <th className="px-3 py-2 text-left text-xs font-semibold text-muted-foreground">
                       Vehicle Type
                     </th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-600">
+                      Arah 1 (daily)
+                    </th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-orange-600">
+                      Arah 2 (daily)
+                    </th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-muted-foreground">
                       Daily (tCO₂e/day)
                     </th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-blue-600">
+                      Arah 1 (yr)
+                    </th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold text-orange-600">
+                      Arah 2 (yr)
+                    </th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-muted-foreground">
-                      Annual Emission (tCO₂e/yr)
+                      Annual (tCO₂e/yr)
                     </th>
                     <th className="px-3 py-2 text-right text-xs font-semibold text-muted-foreground">
                       Share (%)
@@ -372,8 +444,32 @@ export default function AdminCarbonEmissionPage() {
                         className={idx % 2 === 0 ? "bg-background" : "bg-muted/40"}
                       >
                         <td className="px-3 py-2 text-sm">{row.label}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-blue-600">
+                          {row.arah1Daily.toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-orange-600">
+                          {row.arah2Daily.toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </td>
                         <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                           {row.daily.toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-blue-600">
+                          {row.arah1Annual.toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-orange-600">
+                          {row.arah2Annual.toLocaleString(undefined, {
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           })}
@@ -396,8 +492,32 @@ export default function AdminCarbonEmissionPage() {
                     <td className="px-3 py-2 text-xs font-semibold uppercase tracking-wide">
                       Grand Total
                     </td>
+                    <td className="px-3 py-2 text-right font-medium tabular-nums text-blue-600">
+                      {grandTotalArah1Daily.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </td>
+                    <td className="px-3 py-2 text-right font-medium tabular-nums text-orange-600">
+                      {grandTotalArah2Daily.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </td>
                     <td className="px-3 py-2 text-right font-medium tabular-nums text-muted-foreground">
                       {grandTotalDaily.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </td>
+                    <td className="px-3 py-2 text-right font-medium tabular-nums text-blue-600">
+                      {grandTotalArah1Annual.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </td>
+                    <td className="px-3 py-2 text-right font-medium tabular-nums text-orange-600">
+                      {grandTotalArah2Annual.toLocaleString(undefined, {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2,
                       })}
@@ -559,91 +679,59 @@ export default function AdminCarbonEmissionPage() {
                   <th className="px-3 py-2 text-left font-semibold text-muted-foreground align-bottom">
                     Date
                   </th>
-                  <th
-                    colSpan={2}
-                    className="px-3 py-1 text-center font-semibold text-muted-foreground"
-                  >
+                  <th colSpan={4} className="px-3 py-1 text-center font-semibold text-muted-foreground">
                     Motorcycle
                   </th>
-                  <th
-                    colSpan={2}
-                    className="px-3 py-1 text-center font-semibold text-muted-foreground"
-                  >
+                  <th colSpan={4} className="px-3 py-1 text-center font-semibold text-muted-foreground">
                     Car
                   </th>
-                  <th
-                    colSpan={2}
-                    className="px-3 py-1 text-center font-semibold text-muted-foreground"
-                  >
+                  <th colSpan={4} className="px-3 py-1 text-center font-semibold text-muted-foreground">
                     MPV
                   </th>
-                  <th
-                    colSpan={2}
-                    className="px-3 py-1 text-center font-semibold text-muted-foreground"
-                  >
+                  <th colSpan={4} className="px-3 py-1 text-center font-semibold text-muted-foreground">
                     Bus
                   </th>
-                  <th
-                    colSpan={2}
-                    className="px-3 py-1 text-center font-semibold text-muted-foreground"
-                  >
+                  <th colSpan={4} className="px-3 py-1 text-center font-semibold text-muted-foreground">
                     Light Trck
                   </th>
-                  <th
-                    colSpan={2}
-                    className="px-3 py-1 text-center font-semibold text-muted-foreground"
-                  >
+                  <th colSpan={4} className="px-3 py-1 text-center font-semibold text-muted-foreground">
                     Heavy Trck
                   </th>
                   <th
                     rowSpan={2}
                     className="px-3 py-2 text-right font-semibold text-muted-foreground align-bottom"
                   >
-                    Total Emission
+                    Total
                     <br />
-                    <span className="text-[10px] font-normal">
-                      tCO₂e/day
-                    </span>
+                    <span className="text-[10px] font-normal">tCO₂e/day</span>
                   </th>
                 </tr>
                 <tr>
                   <th />
-                  <th className="px-3 py-1 text-right font-semibold text-muted-foreground text-[11px]">
-                    Veh/day
-                  </th>
-                  <th className="px-3 py-1 text-right font-semibold text-muted-foreground text-[11px]">
-                    tCO₂e/day
-                  </th>
-                  <th className="px-3 py-1 text-right font-semibold text-muted-foreground text-[11px]">
-                    Veh/day
-                  </th>
-                  <th className="px-3 py-1 text-right font-semibold text-muted-foreground text-[11px]">
-                    tCO₂e/day
-                  </th>
-                  <th className="px-3 py-1 text-right font-semibold text-muted-foreground text-[11px]">
-                    Veh/day
-                  </th>
-                  <th className="px-3 py-1 text-right font-semibold text-muted-foreground text-[11px]">
-                    tCO₂e/day
-                  </th>
-                  <th className="px-3 py-1 text-right font-semibold text-muted-foreground text-[11px]">
-                    Veh/day
-                  </th>
-                  <th className="px-3 py-1 text-right font-semibold text-muted-foreground text-[11px]">
-                    tCO₂e/day
-                  </th>
-                  <th className="px-3 py-1 text-right font-semibold text-muted-foreground text-[11px]">
-                    Veh/day
-                  </th>
-                  <th className="px-3 py-1 text-right font-semibold text-muted-foreground text-[11px]">
-                    tCO₂e/day
-                  </th>
-                  <th className="px-3 py-1 text-right font-semibold text-muted-foreground text-[11px]">
-                    Veh/day
-                  </th>
-                  <th className="px-3 py-1 text-right font-semibold text-muted-foreground text-[11px]">
-                    tCO₂e/day
-                  </th>
+                  <th className="px-2 py-1 text-right font-semibold text-muted-foreground text-[11px]">Veh/day</th>
+                  <th className="px-2 py-1 text-right font-semibold text-blue-600 text-[11px]">Arah 1</th>
+                  <th className="px-2 py-1 text-right font-semibold text-orange-600 text-[11px]">Arah 2</th>
+                  <th className="px-2 py-1 text-right font-semibold text-muted-foreground text-[11px]">Total</th>
+                  <th className="px-2 py-1 text-right font-semibold text-muted-foreground text-[11px]">Veh/day</th>
+                  <th className="px-2 py-1 text-right font-semibold text-blue-600 text-[11px]">Arah 1</th>
+                  <th className="px-2 py-1 text-right font-semibold text-orange-600 text-[11px]">Arah 2</th>
+                  <th className="px-2 py-1 text-right font-semibold text-muted-foreground text-[11px]">Total</th>
+                  <th className="px-2 py-1 text-right font-semibold text-muted-foreground text-[11px]">Veh/day</th>
+                  <th className="px-2 py-1 text-right font-semibold text-blue-600 text-[11px]">Arah 1</th>
+                  <th className="px-2 py-1 text-right font-semibold text-orange-600 text-[11px]">Arah 2</th>
+                  <th className="px-2 py-1 text-right font-semibold text-muted-foreground text-[11px]">Total</th>
+                  <th className="px-2 py-1 text-right font-semibold text-muted-foreground text-[11px]">Veh/day</th>
+                  <th className="px-2 py-1 text-right font-semibold text-blue-600 text-[11px]">Arah 1</th>
+                  <th className="px-2 py-1 text-right font-semibold text-orange-600 text-[11px]">Arah 2</th>
+                  <th className="px-2 py-1 text-right font-semibold text-muted-foreground text-[11px]">Total</th>
+                  <th className="px-2 py-1 text-right font-semibold text-muted-foreground text-[11px]">Veh/day</th>
+                  <th className="px-2 py-1 text-right font-semibold text-blue-600 text-[11px]">Arah 1</th>
+                  <th className="px-2 py-1 text-right font-semibold text-orange-600 text-[11px]">Arah 2</th>
+                  <th className="px-2 py-1 text-right font-semibold text-muted-foreground text-[11px]">Total</th>
+                  <th className="px-2 py-1 text-right font-semibold text-muted-foreground text-[11px]">Veh/day</th>
+                  <th className="px-2 py-1 text-right font-semibold text-blue-600 text-[11px]">Arah 1</th>
+                  <th className="px-2 py-1 text-right font-semibold text-orange-600 text-[11px]">Arah 2</th>
+                  <th className="px-2 py-1 text-right font-semibold text-muted-foreground text-[11px]">Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -652,56 +740,37 @@ export default function AdminCarbonEmissionPage() {
                     key={row.date}
                     className={idx % 2 === 0 ? "bg-background" : "bg-muted/40"}
                   >
-                    <td className="px-3 py-1.5 whitespace-nowrap">
-                      {row.date}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
-                      {row.motorCount.toLocaleString()}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
-                      {row.motor.toFixed(3)}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
-                      {row.carCount.toLocaleString()}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
-                      {row.car.toFixed(3)}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
-                      {row.mpvCount.toLocaleString()}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
-                      {row.mpv.toFixed(3)}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
-                      {row.busCount.toLocaleString()}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
-                      {row.bus.toFixed(3)}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
-                      {row.lightCount.toLocaleString()}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
-                      {row.light.toFixed(3)}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
-                      {row.heavyCount.toLocaleString()}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums">
-                      {row.heavy.toFixed(3)}
-                    </td>
-                    <td className="px-3 py-1.5 text-right tabular-nums font-medium">
-                      {row.total.toFixed(3)}
-                    </td>
+                    <td className="px-3 py-1.5 whitespace-nowrap">{row.date}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{row.motorCount.toLocaleString()}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-blue-600">{row.motorArah1.toFixed(3)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-orange-600">{row.motorArah2.toFixed(3)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{row.motor.toFixed(3)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{row.carCount.toLocaleString()}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-blue-600">{row.carArah1.toFixed(3)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-orange-600">{row.carArah2.toFixed(3)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{row.car.toFixed(3)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{row.mpvCount.toLocaleString()}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-blue-600">{row.mpvArah1.toFixed(3)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-orange-600">{row.mpvArah2.toFixed(3)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{row.mpv.toFixed(3)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{row.busCount.toLocaleString()}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-blue-600">{row.busArah1.toFixed(3)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-orange-600">{row.busArah2.toFixed(3)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{row.bus.toFixed(3)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{row.lightCount.toLocaleString()}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-blue-600">{row.lightArah1.toFixed(3)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-orange-600">{row.lightArah2.toFixed(3)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{row.light.toFixed(3)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{row.heavyCount.toLocaleString()}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-blue-600">{row.heavyArah1.toFixed(3)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums text-orange-600">{row.heavyArah2.toFixed(3)}</td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{row.heavy.toFixed(3)}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums font-medium">{row.total.toFixed(3)}</td>
                   </tr>
                 ))}
                 {pagedDailyRows.length === 0 && (
                   <tr>
-                    <td
-                      colSpan={8}
-                      className="px-3 py-4 text-center text-muted-foreground"
-                    >
+                    <td colSpan={26} className="px-3 py-4 text-center text-muted-foreground">
                       No data available for this location.
                     </td>
                   </tr>
@@ -710,8 +779,7 @@ export default function AdminCarbonEmissionPage() {
             </table>
           </div>
           <p className="mt-2 text-[11px] text-muted-foreground">
-            Each cell shows estimated daily emission (tCO₂e/day) for that date,
-            aggregated over both directions and all sections in the dataset.
+            Veh/day = total vehicle count per type per day (both directions). Emission columns: Arah 1, Arah 2 (tCO₂e/day per direction), Total (sum). All in tCO₂e/day except Veh/day.
           </p>
         </CardContent>
       </Card>

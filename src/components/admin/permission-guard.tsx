@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { hasPageAccess, isAuthenticated } from "@/lib/auth";
+import { hasPageAccess, isAuthenticated, getUserPages } from "@/lib/auth";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Lock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -58,6 +58,8 @@ export function PermissionGuard({ children, requiredPage }: PermissionGuardProps
 
   // If user doesn't have access, show access denied
   if (!hasAccess) {
+    const userPages = getUserPages();
+    const fallbackPath = userPages.includes('/admin') ? '/admin' : (userPages[0] ?? '/admin');
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Alert className="max-w-md" variant="destructive">
@@ -70,9 +72,9 @@ export function PermissionGuard({ children, requiredPage }: PermissionGuardProps
           <div className="mt-4">
             <Button
               variant="outline"
-              onClick={() => router.push('/admin')}
+              onClick={() => router.push(fallbackPath)}
             >
-              Go to Dashboard
+              {fallbackPath === '/admin' ? 'Go to Dashboard' : 'Go to my page'}
             </Button>
           </div>
         </Alert>

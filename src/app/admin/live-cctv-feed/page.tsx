@@ -316,24 +316,23 @@ export default function LiveCCTVFeedPage() {
         setCurrentPage(1);
         setIsLoading(false);
       } else {
-        // Fetch metadata to get timestamps
+        // Fetch metadata to get availability; use current time for snapshot fetch (cache-bust + display)
         const metadata = await fetchMetadata();
         const siteDevices = getDevicesForSite(selectedSite);
-        
+        const fetchTime = Date.now();
+
         const initialFeeds: CCTVFeed[] = siteDevices.map((device) => {
           const deviceMeta = metadata?.devices.find(d => d.deviceId === device.hid);
           const hasSnapshot = deviceMeta?.success ?? false;
-          const timestamp = deviceMeta?.timestamp || Date.now();
-          
+
           return {
             id: device.hid,
             name: device.name,
             location: device.name,
             status: hasSnapshot ? "online" as const : "offline" as const,
             hid: device.hid,
-            // Use static URL with cache-busting timestamp
-            snapshotUrl: hasSnapshot ? `/cctv-snapshots/${device.hid}.jpg?t=${timestamp}` : undefined,
-            lastUpdate: hasSnapshot ? new Date(timestamp).toLocaleTimeString() : "Never",
+            snapshotUrl: hasSnapshot ? `/cctv-snapshots/${device.hid}.jpg?t=${fetchTime}` : undefined,
+            lastUpdate: hasSnapshot ? new Date(fetchTime).toLocaleTimeString() : "Never",
             isHLS: false,
           };
         });
@@ -341,6 +340,7 @@ export default function LiveCCTVFeedPage() {
         cachedFeedsRef.current = initialFeeds;
         setSelectedFeeds(initialFeeds.map(f => f.id));
         setCurrentPage(1);
+        setLastRefresh(fetchTime);
         setIsLoading(false);
       }
     };
@@ -357,28 +357,28 @@ export default function LiveCCTVFeedPage() {
         setIsLoading(true);
       }
 
-      // Fetch fresh metadata from backend
+      // Fetch fresh metadata from backend; use current time for snapshot URLs (fresh fetch)
       const metadata = await fetchMetadata();
-      
+      const fetchTime = Date.now();
+
       if (metadata) {
         setFeeds(prevFeeds => {
           return prevFeeds.map(feed => {
             if (feed.isHLS) return feed;
-            
+
             const deviceMeta = metadata.devices.find(d => d.deviceId === feed.hid);
             const hasSnapshot = deviceMeta?.success ?? false;
-            const timestamp = deviceMeta?.timestamp || Date.now();
-            
+
             return {
               ...feed,
               status: hasSnapshot ? "online" as const : "offline" as const,
-              snapshotUrl: hasSnapshot ? `/cctv-snapshots/${feed.hid}.jpg?t=${timestamp}` : undefined,
-              lastUpdate: hasSnapshot ? new Date(timestamp).toLocaleTimeString() : "Never",
+              snapshotUrl: hasSnapshot ? `/cctv-snapshots/${feed.hid}.jpg?t=${fetchTime}` : undefined,
+              lastUpdate: hasSnapshot ? new Date(fetchTime).toLocaleTimeString() : "Never",
             };
           });
         });
-        
-        setLastRefresh(Date.now());
+
+        setLastRefresh(fetchTime);
       }
     } catch (error) {
       console.error('Failed to refresh snapshots:', error);
